@@ -1,0 +1,1 @@
+The compact proofs of retrievability (CPOR) library allows a client that has stored data at an untrusted server to verify that the server possesses the original data without retrieving it or storing a copy himself.  The currently supports only a privately verifiable scheme built on pseudo-random functions (PRFs).
