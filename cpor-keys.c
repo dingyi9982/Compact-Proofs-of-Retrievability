@@ -58,8 +58,6 @@ void destroy_cpor_key(CPOR_key *key){
 	key->k_mac_size = 0;
 	if(key->global) destroy_cpor_global(key->global);
 	sfree(key, sizeof(CPOR_key));
-
-	return;
 }
 
 //Read keys from disk

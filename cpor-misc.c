@@ -97,11 +97,11 @@ size_t get_ciphertext_size(size_t plaintext_len){
 
 	size_t block_size = 0;
 
-	EVP_CIPHER_CTX ctx;
-	EVP_CIPHER_CTX_init(&ctx);
-	if(!EVP_EncryptInit_ex(&ctx, EVP_aes_256_cbc(), NULL, NULL, NULL)) return 0;
-	block_size = EVP_CIPHER_CTX_block_size(&ctx);
-	EVP_CIPHER_CTX_cleanup(&ctx);
+	EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+	EVP_CIPHER_CTX_init(ctx);
+	if(!EVP_EncryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, NULL, NULL)) return 0;
+	block_size = EVP_CIPHER_CTX_block_size(ctx);
+	EVP_CIPHER_CTX_cleanup(ctx);
 		
 	return plaintext_len + block_size;
 }
@@ -113,7 +113,7 @@ size_t get_authenticator_size(){
 
 int decrypt_and_verify_secrets(CPOR_key *key, unsigned char *input, size_t input_len, unsigned char *plaintext, size_t *plaintext_len, unsigned char *authenticator, size_t authenticator_len){
 
-	EVP_CIPHER_CTX ctx;
+	EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
 	EVP_CIPHER *cipher = NULL;
 	unsigned char mac[EVP_MAX_MD_SIZE];
 	size_t mac_size = EVP_MAX_MD_SIZE;
@@ -130,7 +130,7 @@ int decrypt_and_verify_secrets(CPOR_key *key, unsigned char *input, size_t input
 	if(memcmp(mac, authenticator, mac_size) != 0) goto cleanup;
 	
 	
-	EVP_CIPHER_CTX_init(&ctx);
+	EVP_CIPHER_CTX_init(ctx);
 	switch(key->k_enc_size){
 		case 16:
 			cipher = (EVP_CIPHER *)EVP_aes_128_cbc();
@@ -144,16 +144,16 @@ int decrypt_and_verify_secrets(CPOR_key *key, unsigned char *input, size_t input
 		default:
 			return 0;
 	}
-	if(!EVP_DecryptInit(&ctx, cipher, key->k_enc, NULL)) goto cleanup;
+	if(!EVP_DecryptInit(ctx, cipher, key->k_enc, NULL)) goto cleanup;
 	
 	*plaintext_len = 0;
 	
-	if(!EVP_DecryptUpdate(&ctx, plaintext, (int *)plaintext_len, input, input_len)) goto cleanup;
-	EVP_DecryptFinal(&ctx, plaintext + *plaintext_len, &len);
+	if(!EVP_DecryptUpdate(ctx, plaintext, (int *)plaintext_len, input, input_len)) goto cleanup;
+	EVP_DecryptFinal(ctx, plaintext + *plaintext_len, &len);
 	
 	*plaintext_len += len;
 	
-	EVP_CIPHER_CTX_cleanup(&ctx);
+	EVP_CIPHER_CTX_cleanup(ctx);
 	
 	return 1;
 
@@ -166,7 +166,7 @@ cleanup:
 
 int encrypt_and_authentucate_secrets(CPOR_key *key, unsigned char *input, size_t input_len, unsigned char *ciphertext, size_t *ciphertext_len, unsigned char *authenticator, size_t *authenticator_len){
 	
-	EVP_CIPHER_CTX ctx;
+	EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
 	EVP_CIPHER *cipher = NULL;
 	int len;
 	
@@ -174,7 +174,7 @@ int encrypt_and_authentucate_secrets(CPOR_key *key, unsigned char *input, size_t
 	
 	OpenSSL_add_all_algorithms();
 	
-	EVP_CIPHER_CTX_init(&ctx);
+	EVP_CIPHER_CTX_init(ctx);
 	switch(key->k_enc_size){
 		case 16:
 			cipher = (EVP_CIPHER *)EVP_aes_128_cbc();
@@ -189,12 +189,12 @@ int encrypt_and_authentucate_secrets(CPOR_key *key, unsigned char *input, size_t
 			return 0;
 	}
 	//TODO: Fix the NULL IV
-	if(!EVP_EncryptInit(&ctx, cipher, key->k_enc, NULL)) goto cleanup;
+	if(!EVP_EncryptInit(ctx, cipher, key->k_enc, NULL)) goto cleanup;
 
 	*ciphertext_len = 0;
 	
-	if(!EVP_EncryptUpdate(&ctx, ciphertext, (int *)ciphertext_len, input, input_len)) goto cleanup;
-	EVP_EncryptFinal(&ctx, ciphertext + *ciphertext_len, &len);
+	if(!EVP_EncryptUpdate(ctx, ciphertext, (int *)ciphertext_len, input, input_len)) goto cleanup;
+	EVP_EncryptFinal(ctx, ciphertext + *ciphertext_len, &len);
 		
 	*ciphertext_len += len;
 	
@@ -203,7 +203,7 @@ int encrypt_and_authentucate_secrets(CPOR_key *key, unsigned char *input, size_t
 	if(!HMAC(EVP_sha1(), key->k_mac, key->k_mac_size, ciphertext, *ciphertext_len,
 		authenticator, (unsigned int *)authenticator_len)) goto cleanup;
 	
-	EVP_CIPHER_CTX_cleanup(&ctx);	
+	EVP_CIPHER_CTX_cleanup(ctx);	
 	
 	return 1;
 	
@@ -237,7 +237,6 @@ cleanup:
 	return NULL;
 }
 
-
 int verify_cpor_key(CPOR_key *key){
 
 	if(!key->k_enc) return 0;
@@ -251,8 +250,6 @@ void destroy_cpor_global(CPOR_global *global){
 	if(!global) return;
 	if(global->Zp) BN_clear_free(global->Zp);
 	sfree(global, sizeof(CPOR_global));
-	
-	return;
 }
 
 CPOR_global *allocate_cpor_global(){
@@ -284,8 +281,6 @@ void destroy_cpor_challenge(CPOR_challenge *challenge){
 	challenge->l = 0;
 	if(challenge->global) destroy_cpor_global(challenge->global);
 	sfree(challenge, sizeof(CPOR_challenge));
-	
-	return;
 }
 
 CPOR_challenge *allocate_cpor_challenge(unsigned int l){
@@ -346,12 +341,10 @@ void destroy_cpor_t(CPOR_t *t){
 	if(t->alpha){
 		for(i = 0; i < params.num_sectors; i++)
 			if(t->alpha[i]) BN_clear_free(t->alpha[i]);
-		 sfree(t->alpha, sizeof(BIGNUM *) * params.num_sectors);
+		sfree(t->alpha, sizeof(BIGNUM *) * params.num_sectors);
 	}
 	t->n = 0;
 	sfree(t, sizeof(CPOR_t));
-	
-	return;
 }
 
 CPOR_t *allocate_cpor_t(){
@@ -390,8 +383,6 @@ void destroy_cpor_proof(CPOR_proof *proof){
 		sfree(proof->mu, sizeof(BIGNUM *) * params.num_sectors);
 	}
 	sfree(proof, sizeof(CPOR_proof));
-
-	return;	
 }
 
 CPOR_proof *allocate_cpor_proof(){

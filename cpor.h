@@ -90,9 +90,13 @@ struct CPOR_parameters_struct{
 		unsigned int num_threads;	/* Number of tagging threads */
 		
 		char *filename;
-		unsigned int filename_len;
 		
 		unsigned int op;
+
+		char *server;
+
+		char *tag_filename;
+		char *t_filename;
 };
 
 extern CPOR_params params;

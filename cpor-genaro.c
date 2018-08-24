@@ -29,7 +29,7 @@
 
 #include "cpor.h"
 #include <getopt.h>
-
+#include <curl/curl.h>
 
 
 static struct option longopts[] = {
@@ -48,6 +48,66 @@ static struct option longopts[] = {
 	{"verify", no_argument, NULL, 'v'},
 	{NULL, 0, NULL, 0}
 };
+
+
+static inline char separator()
+{
+#ifdef _WIN32
+    return '\\';
+#else
+    return '/';
+#endif
+}
+
+
+char *create_tmp_name(char *extension)
+{
+    char *tmp_folder = "/tmp";
+    int encode_len = 10;
+    int file_name_len = 10;
+    int extension_len = strlen(extension);
+    int tmp_folder_len = strlen(tmp_folder);
+    if (tmp_folder[tmp_folder_len - 1] == separator()) {
+        tmp_folder[tmp_folder_len - 1] = '\0';
+        tmp_folder_len -= 1;
+    }
+
+    char *path = calloc(
+        tmp_folder_len + 1 + encode_len + extension_len + 1,
+        sizeof(char)
+    );
+
+    char *digest_encoded = "abcdefg";
+
+    sprintf(path,
+            "%s%c%s%s",
+            tmp_folder,
+            separator(),
+            digest_encoded,
+            extension
+            );
+
+    return path;
+}
+
+
+static size_t read_callback(void *ptr, size_t size, size_t nmemb, void *stream)
+{
+    size_t retcode;
+    curl_off_t nread;
+
+    /* in real-world cases, this would probably get this data differently
+       as this fread() stuff is exactly what the library already would do
+       by default internally */
+    retcode = fread(ptr, size, nmemb, stream);
+
+    nread = (curl_off_t)retcode;
+
+    fprintf(stderr, "*** We read %" CURL_FORMAT_CURL_OFF_T
+    " bytes from file\n", nread);
+
+    return retcode;
+}
 
 
 int main(int argc, char **argv){
@@ -78,12 +138,12 @@ int main(int argc, char **argv){
 	params.num_challenge = params.lambda;	/* From the paper, a "conservative choice" for l is lamda, the number of bits to represent our group, Zp */
 
 	params.filename = NULL;
-	params.filename_len = 0;
 
 	params.op = CPOR_OP_NOOP;
 
-	
+    params.server = "http://localhost:9999/challenge/tag";
 
+	curl_global_init(CURL_GLOBAL_ALL);
 
 	while((opt = getopt_long(argc, argv, "b:e:h:l:m:p:kt:v:y:", longopts, NULL)) != -1){
 		switch(opt){
@@ -118,7 +178,6 @@ int main(int argc, char **argv){
 					break;
 				}
 				params.filename = optarg;
-				params.filename_len = strlen(optarg);
 				params.op = CPOR_OP_TAG;
 
 				break;
@@ -129,7 +188,6 @@ int main(int argc, char **argv){
 					break;
 				}
 				params.filename = optarg;
-				params.filename_len = strlen(optarg);
 				params.op = CPOR_OP_VERIFY;
 
 				break;
@@ -175,16 +233,75 @@ int main(int argc, char **argv){
 		#ifdef DEBUG_MODE
 			gettimeofday(&tv1, NULL);
 		#endif
-			if(!cpor_tag_file(params.filename, params.filename_len, NULL, 0, NULL, 0)) printf("No tag\n");
+            params.tag_filename = create_tmp_name(".tag");
+            params.t_filename = create_tmp_name(".t");
+			if(!cpor_tag_file(params.filename, strlen(params.filename), params.tag_filename, 
+                strlen(params.tag_filename), params.t_filename, strlen(params.t_filename))) printf("No tag\n");
 			else printf("Done\n");
 		#ifdef DEBUG_MODE
 			gettimeofday(&tv2, NULL);
-			printf("%lf\n", (double)( (double)(double)(((double)tv2.tv_sec) + (double)((double)tv2.tv_usec/1000000)) - (double)((double)((double)tv1.tv_sec) + (double)((double)tv1.tv_usec/1000000)) ) );
+			printf("%lf\n", (double)tv2.tv_sec + (double)((double)tv2.tv_usec/1000000) - (double)((double)tv1.tv_sec) + (double)((double)tv1.tv_usec/1000000));
 		#endif
+            CURL *curl = curl_easy_init();
+            if (!curl) {
+                return 1;
+            }
+
+            CURLcode res;
+            FILE *tag_file ;
+            struct stat file_info;
+
+            /* get the file size of the local file */
+            stat(params.tag_filename, &file_info);
+
+            /* get a FILE * of the same file, could also be made with
+            fdopen() from the previous descriptor, but hey this is just
+            an example! */
+            tag_file = fopen(params.tag_filename, "rb");
+
+            /* In windows, this will init the winsock stuff */
+            curl_global_init(CURL_GLOBAL_ALL);
+
+            /* get a curl handle */
+            curl = curl_easy_init();
+            if(curl) {
+                /* we want to use our own read function */
+                curl_easy_setopt(curl, CURLOPT_READFUNCTION, read_callback);
+
+                /* enable uploading */
+                curl_easy_setopt(curl, CURLOPT_UPLOAD, 1L);
+
+                /* HTTP PUT please */
+                curl_easy_setopt(curl, CURLOPT_PUT, 1L);
+
+                /* specify target URL, and note that this URL should include a file
+                name, not only a directory */
+                curl_easy_setopt(curl, CURLOPT_URL, params.server);
+
+                /* now specify which file to upload */
+                curl_easy_setopt(curl, CURLOPT_READDATA, tag_file);
+
+                /* provide the size of the upload, we specicially typecast the value
+                to curl_off_t since we must be sure to use the correct data size */
+                curl_easy_setopt(curl, CURLOPT_INFILESIZE_LARGE,
+                                (curl_off_t)file_info.st_size);
+
+                /* Now run off and do what you've been told! */
+                res = curl_easy_perform(curl);
+                /* Check for errors */
+                if(res != CURLE_OK)
+                    fprintf(stderr, "curl_easy_perform() failed: %s\n",
+                            curl_easy_strerror(res));
+
+                /* always cleanup */
+                curl_easy_cleanup(curl);
+                fclose(tag_file); /* close the local file */
+            }
 			break;
 			
-			
 		case CPOR_OP_VERIFY:
+			params.tag_filename = create_tmp_name(".tag");
+			params.t_filename = create_tmp_name(".t");
 		#ifdef DEBUG_MODE
 			fprintf(stdout, "Using the following settings:\n");
 			fprintf(stdout, "\tBlock Size: %u bytes\n", params.block_size);
@@ -193,17 +310,17 @@ int main(int argc, char **argv){
 		#endif		
 			fprintf(stdout, "Challenging file %s...\n", params.filename); fflush(stdout);				
 			fprintf(stdout, "\tCreating challenge for %s...", params.filename); fflush(stdout);
-			challenge = cpor_challenge_file(params.filename, params.filename_len, NULL, 0);
+			challenge = cpor_challenge_file(params.filename, strlen(params.filename), params.t_filename, strlen(params.t_filename));
 			if(!challenge) printf("No challenge\n");
 			else printf("Done.\n");
 
 			fprintf(stdout, "\tComputing proof...");fflush(stdout);
-			proof = cpor_prove_file(params.filename, params.filename_len, NULL, 0, challenge);
+			proof = cpor_prove_file(params.filename, strlen(params.filename), params.tag_filename, strlen(params.tag_filename), challenge);
 			if(!proof) printf("No proof\n");
 			else printf("Done.\n");
 
 			printf("\tVerifying proof..."); fflush(stdout);		
-			if((i = cpor_verify_file(params.filename, params.filename_len, NULL, 0, challenge, proof)) == 1) printf("Verified\n");
+			if((i = cpor_verify_file(params.filename, strlen(params.filename), params.t_filename, strlen(params.t_filename), challenge, proof)) == 1) printf("Verified\n");
 			else if(i == 0) printf("Cheating!\n");
 			else printf("Error\n");
 
@@ -215,63 +332,9 @@ int main(int argc, char **argv){
 		default:
 			break;
 	}
+
+    curl_global_cleanup();
 	
 	return 0;
 	
 }
-
-
-
-
-
-
-
-
-
-/*
-	unsigned char k_prf[CPOR_PRF_KEY_SIZE];
-	unsigned char block[CPOR_BLOCK_SIZE];
-	CPOR_global *global = NULL;
-	CPOR_tag *tag;
-	BIGNUM **alpha = NULL;
-
-	printf("Blocksize: %d Sector size: %d Num sectors: %d\n", CPOR_BLOCK_SIZE, CPOR_SECTOR_SIZE, CPOR_NUM_SECTORS);
-	
-	global = cpor_create_global(CPOR_ZP_BITS);
-	if(!global) printf("No global\n");
-	
-	RAND_bytes(k_prf, CPOR_PRF_KEY_SIZE);
-	RAND_bytes(block, CPOR_BLOCK_SIZE);
-	
-	alpha = malloc(sizeof(BIGNUM *) * CPOR_NUM_SECTORS);
-	memset(alpha, 0, sizeof(BIGNUM *) * CPOR_NUM_SECTORS);
-	
-	for(i = 0; i < CPOR_NUM_SECTORS; i++){
-		alpha[i] = BN_new();
-		BN_rand_range(alpha[i], global->Zp);
-	}
-	
-	tag = cpor_tag_block(global, k_prf, alpha, block, CPOR_BLOCK_SIZE, 0);
-	if(!tag) printf("No tag\n");
-	
-	
-	challenge = cpor_create_challenge(global, 1);
-	if(!challenge) printf("No challenge\n");
-		
-	proof = cpor_create_proof_update(global, challenge, proof, tag, block, CPOR_BLOCK_SIZE, 0);
-	if(!proof) printf("No proof\n");
-	
-	if(( i = cpor_verify_proof(global, proof, challenge, k_prf, alpha)) == 1 ) printf("Verified!\n");
-	else if (i == 0) printf("Cheating!\n");
-	else printf("Error!\n");
-	
-	for(i = 0; i < CPOR_NUM_SECTORS; i++){
-		if(alpha[i]) BN_clear_free(alpha[i]);
-	}
-	sfree(alpha, sizeof(BIGNUM *) * CPOR_NUM_SECTORS);
-	
-	destroy_cpor_global(global);
-	destroy_cpor_tag(tag);
-	destroy_cpor_challenge(challenge);
-	destroy_cpor_proof(proof);
-*/
