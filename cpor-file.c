@@ -299,7 +299,7 @@ void *cpor_tag_thread(void *threadargs_ptr){
 		fread(buf, params.block_size, 1, threadargs->file);
 		if(ferror(threadargs->file))goto cleanup;
 		//tag = cpor_tag_block(threadargs->key, buf, params.block_size, block);
-		tag = cpor_tag_block(threadargs->key->global, threadargs->t->k_prf, threadargs->t->alpha, buf, params.block_size, block);
+		tag = cpor_tag_block(threadargs->key->global, threadargs->t->k_prf, threadargs->t->alpha, buf, block);
 		if(!tag) goto cleanup;
 		/* Store the tag in a buffer until all threads are done. Writer should destroy tags. */
 		threadargs->tags[block] = tag;
@@ -602,7 +602,7 @@ CPOR_proof *cpor_prove_file(char *filepath, size_t filepath_len, char *tagfilepa
 		tag = read_cpor_tag(tagfile, challenge->I[i]);
 		if(!tag) goto cleanup;
 		
-		proof = cpor_create_proof_update(challenge, proof, tag, block, params.block_size, challenge->I[i], i);
+		proof = cpor_create_proof_update(challenge, proof, tag, block, challenge->I[i], i);
 		if(!proof) goto cleanup;
 		
 		destroy_cpor_tag(tag);

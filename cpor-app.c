@@ -56,10 +56,7 @@ int main(int argc, char **argv){
 	CPOR_proof *proof = NULL;
 	int i = -1;
 	int opt = -1;
-#ifdef USE_S3
-	char tagfilepath[MAXPATHLEN];
-	char tfilepath[MAXPATHLEN];
-#endif	
+
 #ifdef DEBUG_MODE
 	struct timeval tv1, tv2;
 	double values[26];
@@ -144,14 +141,14 @@ int main(int argc, char **argv){
 		}
 	}
 
+
+    /* The size (in bits) of the prime that creates the field Z_p */
+    params.Zp_bits = params.lambda;
 	/* The message sector size 1 byte smaller than the size of Zp so that it 
 	 * is guaranteed to be an element of the group Zp */
 	params.sector_size = ((params.Zp_bits/8) - 1);
 	/* Number of sectors per block */
 	params.num_sectors = ( (params.block_size/params.sector_size) + ((params.block_size % params.sector_size) ? 1 : 0) );
-	/* The size (in bits) of the prime that creates the field Z_p */
-	params.Zp_bits = params.lambda;
-
 
 
 	switch(params.op){
@@ -184,24 +181,6 @@ int main(int argc, char **argv){
 			gettimeofday(&tv2, NULL);
 			printf("%lf\n", (double)( (double)(double)(((double)tv2.tv_sec) + (double)((double)tv2.tv_usec/1000000)) - (double)((double)((double)tv1.tv_sec) + (double)((double)tv1.tv_usec/1000000)) ) );
 		#endif
-
-		#ifdef USE_S3
-			fprintf(stdout, "\tWriting file %s to S3...", params.filename); fflush(stdout);
-			if(!cpor_s3_put_file(params.filename, params.filename_len) printf("Couldn't write %s to S3.\n", params.filename);
-			else printf("Done.\n");
-
-			memset(tagfilepath, 0, MAXPATHLEN);
-			snprintf(tagfilepath, MAXPATHLEN, "%s.tag", params.filename);
-			fprintf(stdout, "\tWriting tag file %s to S3...", tagfilepath); fflush(stdout);
-			if(!cpor_s3_put_file(tagfilepath, strlen(tagfilepath))) printf("Couldn't write %s.tag to S3.\n", params.filename);
-			else printf("Done.\n");
-
-			memset(tfilepath, 0, MAXPATHLEN);
-			snprintf(tfilepath, MAXPATHLEN, "%s.t", params.filename);
-			fprintf(stdout, "\tWriting t file %s to S3...", tfilepath); fflush(stdout);
-			if(!cpor_s3_put_file(tfilepath, strlen(tfilepath))) printf("Couldn't write %s.t to S3.\n", params.filename);
-			else printf("Done.\n");			
-		#endif
 			break;
 			
 			
@@ -213,35 +192,13 @@ int main(int argc, char **argv){
 			fprintf(stdout, "\tNumber of Challenge blocks: %u \n", params.num_challenge);
 		#endif		
 			fprintf(stdout, "Challenging file %s...\n", params.filename); fflush(stdout);				
-
-		#ifdef USE_S3
-			printf("\tGetting tag file...");fflush(stdout);
-			fflush(stdout);
-			memset(tagfilepath, 0, MAXPATHLEN);
-			snprintf(tagfilepath, MAXPATHLEN, "%s.tag", params.filename);
-			fprintf(stdout, "\tWriting tag file %s to S3...", tagfilepath); fflush(stdout);
-			if(!cpor_s3_get_file(tagfilepath, strlen(tagfilepath))) printf("Cloudn't get tag file.\n");
-			else printf("Done.\n");
-
-			printf("\tGetting t file...");fflush(stdout);
-			fflush(stdout);
-			memset(tfilepath, 0, MAXPATHLEN);
-			snprintf(tfilepath, MAXPATHLEN, "%s.t", params.filename);
-			if(!cpor_s3_get_file(tfilepath, strlen(tfilepath))) printf("Cloudn't get t file.\n");
-			else printf("Done.\n");
-		#endif
-
 			fprintf(stdout, "\tCreating challenge for %s...", params.filename); fflush(stdout);
 			challenge = cpor_challenge_file(params.filename, params.filename_len, NULL, 0);
 			if(!challenge) printf("No challenge\n");
 			else printf("Done.\n");
 
 			fprintf(stdout, "\tComputing proof...");fflush(stdout);
-		#ifdef USE_S3
-			proof = cpor_s3_prove_file(params.filename, params.filename_len, NULL, 0, challenge);
-		#else	
 			proof = cpor_prove_file(params.filename, params.filename_len, NULL, 0, challenge);
-		#endif
 			if(!proof) printf("No proof\n");
 			else printf("Done.\n");
 

@@ -61,7 +61,7 @@ cleanup:
 * NOTE: the tag structure contains two secrets, k_prf (the key to the PRF) and alpha (a randomly chosen value to
 * blind the message.
 */
-CPOR_tag *cpor_tag_block(CPOR_global *global, unsigned char *k_prf, BIGNUM **alpha, unsigned char *block, size_t blocksize, unsigned int index){
+CPOR_tag *cpor_tag_block(CPOR_global *global, unsigned char *k_prf, BIGNUM **alpha, unsigned char *block, unsigned int index){
 
 	CPOR_tag *tag = NULL;
 	BN_CTX * ctx = NULL;
@@ -71,7 +71,7 @@ CPOR_tag *cpor_tag_block(CPOR_global *global, unsigned char *k_prf, BIGNUM **alp
 	BIGNUM *sum = NULL;
 	int j = 0;
 	
-	if(!global || !block || !blocksize || !alpha || !k_prf) return NULL;
+	if(!global || !block || !alpha || !k_prf) return NULL;
 	
 	if(!global->Zp) return NULL;
 	
@@ -91,10 +91,10 @@ CPOR_tag *cpor_tag_block(CPOR_global *global, unsigned char *k_prf, BIGNUM **alp
 		size_t sector_size = 0;
 		unsigned char *sector = block + (j * params.sector_size);
 
-		if( (blocksize - (j * params.sector_size)) > params.sector_size)
+		if( (params.block_size - (j * params.sector_size)) > params.sector_size)
 			sector_size = params.sector_size;
 		else
-			sector_size = (blocksize - (j * params.sector_size));
+			sector_size = (params.block_size - (j * params.sector_size));
 		
 		/* Convert the sector into a BIGNUM */
 		if(!BN_bin2bn(sector, sector_size, message)) goto cleanup;
@@ -200,7 +200,7 @@ CPOR_proof *cpor_create_proof_final(CPOR_proof *proof){
 }
 
 /* For each message index i, call update (we're going to call this challenge->l times */
-CPOR_proof *cpor_create_proof_update(CPOR_challenge *challenge, CPOR_proof *proof, CPOR_tag *tag, unsigned char *block, size_t blocksize, unsigned int index, unsigned int i){
+CPOR_proof *cpor_create_proof_update(CPOR_challenge *challenge, CPOR_proof *proof, CPOR_tag *tag, unsigned char *block, unsigned int index, unsigned int i){
 
 	BN_CTX * ctx = NULL;
 	BIGNUM *message = NULL;
@@ -220,10 +220,10 @@ CPOR_proof *cpor_create_proof_update(CPOR_challenge *challenge, CPOR_proof *proo
 		size_t sector_size = 0;
 		unsigned char *sector = block + (j * params.sector_size);
 
-		if( (blocksize - (j * params.sector_size)) > params.sector_size)
+		if( (params.block_size - (j * params.sector_size)) > params.sector_size)
 			sector_size = params.sector_size;
 		else
-			sector_size = (blocksize - (j * params.sector_size));
+			sector_size = (params.block_size - (j * params.sector_size));
 
 		/* Convert the sector into a BIGNUM */
 		if(!BN_bin2bn(sector, (unsigned int)sector_size, message)) goto cleanup;

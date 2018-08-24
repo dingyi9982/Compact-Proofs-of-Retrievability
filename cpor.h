@@ -167,11 +167,11 @@ CPOR_key *cpor_create_new_keys();
 /* Core CPOR functions from cpor-core.c */
 CPOR_global *cpor_create_global(unsigned int bits);
 
-CPOR_tag *cpor_tag_block(CPOR_global *global, unsigned char *k_prf, BIGNUM **alpha, unsigned char *block, size_t blocksize, unsigned int index);
+CPOR_tag *cpor_tag_block(CPOR_global *global, unsigned char *k_prf, BIGNUM **alpha, unsigned char *block, unsigned int index);
 
 CPOR_challenge *cpor_create_challenge(CPOR_global *global, unsigned int n);
 
-CPOR_proof *cpor_create_proof_update(CPOR_challenge *challenge, CPOR_proof *proof, CPOR_tag *tag, unsigned char *block, size_t blocksize, unsigned int index, unsigned int i);
+CPOR_proof *cpor_create_proof_update(CPOR_challenge *challenge, CPOR_proof *proof, CPOR_tag *tag, unsigned char *block, unsigned int index, unsigned int i);
 
 CPOR_proof *cpor_create_proof_final(CPOR_proof *proof);
 
@@ -214,12 +214,5 @@ CPOR_t *allocate_cpor_t();
 
 void destroy_cpor_global(CPOR_global *global);
 CPOR_global *allocate_cpor_global();
-
-/* From cpor-s3.c */
-#ifdef USE_S3
-int cpor_s3_put_file(char *filepath, size_t filepath_len);
-int cpor_s3_get_file(char *filepath, size_t filepath_len);
-CPOR_proof *cpor_s3_prove_file(char *filepath, size_t filepath_len, char *tagfilepath, size_t tagfilepath_len, CPOR_challenge *challenge);
-#endif
 
 #endif

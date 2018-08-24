@@ -122,7 +122,7 @@ CPOR_key *cpor_create_new_keys(){
 	if( ((key->global = cpor_create_global(params.Zp_bits)) == NULL)) goto cleanup;
 
 	if(!RAND_bytes(key->k_enc, params.enc_key_size)) goto cleanup;
-	key->k_enc_size = params.enc_key_size;	
+	key->k_enc_size = params.enc_key_size;
 	if(!RAND_bytes(key->k_mac, params.mac_key_size)) goto cleanup;
 	key->k_mac_size = params.mac_key_size;
 	
