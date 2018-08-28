@@ -28,9 +28,9 @@
 */
 
 #include "cpor.h"
+#include "headers.h"
 #include <getopt.h>
 #include <curl/curl.h>
-
 
 static struct option longopts[] = {
 	{"numchallenge", no_argument, NULL, 'l'},
@@ -49,7 +49,6 @@ static struct option longopts[] = {
 	{NULL, 0, NULL, 0}
 };
 
-
 static inline char separator()
 {
 #ifdef _WIN32
@@ -58,7 +57,6 @@ static inline char separator()
     return '/';
 #endif
 }
-
 
 char *create_tmp_name(char *extension)
 {
@@ -108,7 +106,6 @@ char *create_tmp_name(char *extension)
 
     return path;
 }
-
 
 static size_t read_callback(void *ptr, size_t size, size_t nmemb, void *stream)
 {

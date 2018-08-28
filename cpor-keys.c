@@ -29,6 +29,7 @@
 */
 
 #include "cpor.h"
+#include "headers.h"
 
 CPOR_key *allocate_cpor_key(CPOR_params *myparams){
 	CPOR_key *key = NULL;

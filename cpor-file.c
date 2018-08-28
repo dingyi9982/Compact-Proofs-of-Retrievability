@@ -28,6 +28,8 @@
 */
 
 #include "cpor.h"
+#include "headers.h"
+
 #ifdef THREADING
 #include <pthread.h>
 #endif
