@@ -32,7 +32,6 @@
 CPOR_params params;
 
 CPOR_global *cpor_create_global(unsigned int bits){
-
 	CPOR_global *global = NULL;
 	BN_CTX *ctx = NULL;
 	
@@ -62,7 +61,6 @@ cleanup:
 * blind the message.
 */
 CPOR_tag *cpor_tag_block(CPOR_params *myparams, CPOR_global *global, unsigned char *k_prf, BIGNUM **alpha, unsigned char *block, unsigned int index){
-
 	CPOR_tag *tag = NULL;
 	BN_CTX * ctx = NULL;
 	BIGNUM *prf_i = NULL;
@@ -140,7 +138,6 @@ cleanup:
 *  Returns an allocated and populated CPOR_challenge struct or NULL on failure.
 */
 CPOR_challenge *cpor_create_challenge(CPOR_params *myparams, CPOR_global *global, unsigned int n){
-
 	CPOR_challenge *challenge;
 	int i = 0;
 	unsigned int l;
@@ -195,13 +192,11 @@ cleanup:
 }
 
 CPOR_proof *cpor_create_proof_final(CPOR_proof *proof){
-
 	return proof;
 }
 
 /* For each message index i, call update (we're going to call this challenge->l times */
 CPOR_proof *cpor_create_proof_update(CPOR_params *myparams, CPOR_challenge *challenge, CPOR_proof *proof, CPOR_tag *tag, unsigned char *block, unsigned int index, unsigned int i){
-
 	BN_CTX * ctx = NULL;
 	BIGNUM *message = NULL;
 	BIGNUM *product = NULL;
@@ -263,7 +258,6 @@ cleanup:
 
 
 int cpor_verify_proof(CPOR_params *myparams, CPOR_global *global, CPOR_proof *proof, CPOR_challenge *challenge, unsigned char *k_prf, BIGNUM **alpha){
-
 	BN_CTX * ctx = NULL;
 	BIGNUM *prf_i = NULL;
 	BIGNUM *product = NULL;

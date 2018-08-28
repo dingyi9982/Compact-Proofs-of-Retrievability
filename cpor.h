@@ -74,7 +74,6 @@
 typedef struct CPOR_parameters_struct CPOR_params;
 
 struct CPOR_parameters_struct{
-	
 		/* Parameters */
 		unsigned int lambda;		/* The security parameter lambda */
 		unsigned int Zp_bits;		/* The size (in bits) of the prime that creates the field Z_p */
@@ -88,16 +87,15 @@ struct CPOR_parameters_struct{
 		unsigned int num_challenge;	/* Number of blocks to challenge */
 		
 		unsigned int num_threads;	/* Number of tagging threads */
-		
-		char *filename;
-		
+
 		unsigned int op;
 
 		char *server;
 
-		char *key_filename;
-		char *t_filename;
-		char *tag_filename;
+		char *filename;
+		char *key_data;
+		char *t_data;
+		char *tag_data;
 };
 
 extern CPOR_params params;
@@ -130,17 +128,14 @@ struct CPOR_tag_struct{
 typedef struct CPOR_t_struct CPOR_t;
 
 struct CPOR_t_struct{
-	
 	unsigned int n;			/* The number of blocks in the file */
 	unsigned char *k_prf;	/* The randomly generated PRF key for this file */
 	BIGNUM **alpha;
 };
 
-
 typedef struct CPOR_challenge_struct CPOR_challenge;
 
 struct CPOR_challenge_struct{
-
 	unsigned int l;			/* The number of elements to be tested */
 	unsigned int *I;		/* An array of l indicies to be tested */
 	BIGNUM **nu;			/* An array of l random elements */
@@ -163,10 +158,9 @@ CPOR_proof *cpor_prove_file(CPOR_params *myparams, CPOR_challenge *challenge);
 
 int cpor_verify_file(CPOR_params *myparams, CPOR_challenge *challenge, CPOR_proof *proof);
 
-CPOR_tag *read_cpor_tag(FILE *tagfile, unsigned int index);
+CPOR_tag *read_cpor_tag(char *tag_data, unsigned int index);
 
 /* Key management from cpor-keys.c */
-
 CPOR_key *cpor_create_new_keys();
 
 /* Core CPOR functions from cpor-core.c */
@@ -220,9 +214,7 @@ CPOR_t *allocate_cpor_t(CPOR_params *myparams);
 void destroy_cpor_global(CPOR_global *global);
 CPOR_global *allocate_cpor_global();
 
-int cpor_challenge(char *filename, char *key_filename, char *t_filename, char *tag_filename, 
+int cpor_verify(char *filename, char *key_data, char *t_data, char *tag_data,
 				   unsigned int lambda, unsigned int block_size);
-				   
-void cpor_test();
 
 #endif

@@ -30,7 +30,6 @@
 #include "cpor.h"
 
 void printhex(unsigned char *ptr, size_t size){
-
 	size_t i = 0;
 	for(i = 0; i < size; i++){
 		printf("%02X", *ptr);
@@ -62,7 +61,6 @@ int get_rand_range(unsigned int min, unsigned int max, unsigned int *value){
  * In this implementation we use HMAC-SHA1.
  */
 BIGNUM *generate_prf_i(CPOR_params *myparams, unsigned char *key, unsigned int index){
-	
 	unsigned char *prf_result = NULL;
 	size_t prf_result_size = 0;
 	BIGNUM *prf_result_bn = NULL;
@@ -94,7 +92,6 @@ cleanup:
 }
 
 size_t get_ciphertext_size(size_t plaintext_len){
-
 	size_t block_size = 0;
 
 	EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
@@ -112,7 +109,6 @@ size_t get_authenticator_size(){
 }
 
 int decrypt_and_verify_secrets(CPOR_key *key, unsigned char *input, size_t input_len, unsigned char *plaintext, size_t *plaintext_len, unsigned char *authenticator, size_t authenticator_len){
-
 	EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
 	EVP_CIPHER *cipher = NULL;
 	unsigned char mac[EVP_MAX_MD_SIZE];
@@ -165,7 +161,6 @@ cleanup:
 }
 
 int encrypt_and_authentucate_secrets(CPOR_key *key, unsigned char *input, size_t input_len, unsigned char *ciphertext, size_t *ciphertext_len, unsigned char *authenticator, size_t *authenticator_len){
-	
 	EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
 	EVP_CIPHER *cipher = NULL;
 	int len;
@@ -212,11 +207,9 @@ cleanup:
 	*authenticator_len = 0;
 	
 	return 0;
-	
 }
 
 CPOR_t *cpor_create_t(CPOR_params *myparams, CPOR_global *global, unsigned int n){
-
 	CPOR_t *t = NULL;
 	int i = 0;
 	
@@ -238,7 +231,6 @@ cleanup:
 }
 
 int verify_cpor_key(CPOR_key *key){
-
 	if(!key->k_enc) return 0;
 	if(!key->k_mac) return 0;
 	
@@ -246,14 +238,12 @@ int verify_cpor_key(CPOR_key *key){
 }
 
 void destroy_cpor_global(CPOR_global *global){
-
 	if(!global) return;
 	if(global->Zp) BN_clear_free(global->Zp);
 	sfree(global, sizeof(CPOR_global));
 }
 
 CPOR_global *allocate_cpor_global(){
-
 	CPOR_global *global = NULL;
 	
 	if( ((global = malloc(sizeof(CPOR_global))) == NULL)) return NULL;
@@ -267,7 +257,6 @@ cleanup:
 }
 
 void destroy_cpor_challenge(CPOR_challenge *challenge){
-
 	int i;
 
 	if(!challenge) return;
@@ -284,7 +273,6 @@ void destroy_cpor_challenge(CPOR_challenge *challenge){
 }
 
 CPOR_challenge *allocate_cpor_challenge(unsigned int l){
-	
 	CPOR_challenge *challenge = NULL;
 	int i = 0;
 
@@ -308,7 +296,6 @@ cleanup:
 
 
 void destroy_cpor_tag(CPOR_tag *tag){
-
 	if(!tag) return;
 	if(tag->sigma) BN_clear_free(tag->sigma);
 	sfree(tag, sizeof(CPOR_tag));
@@ -316,7 +303,6 @@ void destroy_cpor_tag(CPOR_tag *tag){
 }
 
 CPOR_tag *allocate_cpor_tag(){
-
 	CPOR_tag *tag = NULL;
 	
 	if( ((tag = malloc(sizeof(CPOR_tag))) == NULL)) return NULL;
@@ -333,7 +319,6 @@ cleanup:
 }
 
 void destroy_cpor_t(CPOR_params *myparams, CPOR_t *t){
-
 	int i;
 
 	if(!t) return;
@@ -348,7 +333,6 @@ void destroy_cpor_t(CPOR_params *myparams, CPOR_t *t){
 }
 
 CPOR_t *allocate_cpor_t(CPOR_params *myparams){
-
 	CPOR_t *t = NULL;
 	int i = 0;
 	
@@ -371,7 +355,6 @@ cleanup:
 }
 
 void destroy_cpor_proof(CPOR_params *myparams, CPOR_proof *proof){
-
 	int i = 0;
 
 	if(!proof) return;
@@ -386,7 +369,6 @@ void destroy_cpor_proof(CPOR_params *myparams, CPOR_proof *proof){
 }
 
 CPOR_proof *allocate_cpor_proof(CPOR_params *myparams){
-
 	CPOR_proof *proof = NULL;
 	int i = 0;
 		

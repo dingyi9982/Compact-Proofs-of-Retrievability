@@ -22,5 +22,5 @@ ENDIF()
 add_library(cpor cpor-genaro.c cpor-core.c cpor-file.c cpor-keys.c cpor-misc.c)
 target_link_libraries(cpor crypto curl)
 
-# add_executable(cpor-genaro cpor-genaro.c cpor-core.c cpor-file.c cpor-keys.c cpor-misc.c)
-# target_link_libraries(cpor-genaro crypto curl)
+add_executable(cpor-genaro cpor-genaro.c cpor-core.c cpor-file.c cpor-keys.c cpor-misc.c)
+target_link_libraries(cpor-genaro crypto curl)

@@ -33,7 +33,6 @@
 #endif
 
 static int write_cpor_tag(FILE *tagfile, CPOR_tag *tag){
-	
 	unsigned char *sigma = NULL;
 	size_t sigma_size = 0;
 	
@@ -62,40 +61,37 @@ cleanup:
 	return 0;
 }
 
-CPOR_tag *read_cpor_tag(FILE *tagfile, unsigned int index){
-
+CPOR_tag *read_cpor_tag(char *tag_data, unsigned int index){
 	CPOR_tag *tag = NULL;
 	size_t sigma_size = 0;
 	unsigned char *sigma = NULL;
 	int i = 0;
+	unsigned long data_index = 0;
 
-	if(!tagfile) return NULL;
+	if(!tag_data) return NULL;
 	
 	/* Allocate memory */
 	if( ((tag = allocate_cpor_tag()) == NULL)) goto cleanup;
 	
-	/* Seek to start of tag file */
-	if(fseek(tagfile, 0, SEEK_SET) < 0) goto cleanup;
-	
 	/* Seek to tag offset index */
 	for(i = 0; i < index; i++){
-		fread(&sigma_size, sizeof(size_t), 1, tagfile);
-		if(ferror(tagfile)) goto cleanup;
-		if(fseek(tagfile, (sigma_size + sizeof(unsigned int)), SEEK_CUR) < 0) goto cleanup;
+		memcpy(&sigma_size, tag_data + data_index, sizeof(size_t));
+		data_index += sizeof(size_t) + sigma_size + sizeof(unsigned int);
 	}
 	
 	/* Read in the sigma we're looking for */
-	fread(&sigma_size, sizeof(size_t), 1, tagfile);
-	if(ferror(tagfile)) goto cleanup;
+	memcpy(&sigma_size, tag_data + data_index, sizeof(size_t));
+	data_index += sizeof(size_t);
+
 	if( ((sigma = malloc(sigma_size)) == NULL)) goto cleanup;
 	memset(sigma, 0, sigma_size);
-	fread(sigma, sigma_size, 1, tagfile);
-	if(ferror(tagfile)) goto cleanup;
+	memcpy(sigma, tag_data + data_index, sigma_size);
+	data_index += sigma_size;
 	if(!BN_bin2bn(sigma, sigma_size, tag->sigma)) goto cleanup;
 	
 	/* read index */
-	fread(&(tag->index), sizeof(unsigned int), 1, tagfile);
-	if(ferror(tagfile)) goto cleanup;
+	memcpy(&(tag->index), tag_data + data_index, sizeof(unsigned int));
+	data_index += sizeof(unsigned int);
 	
 	if(sigma) sfree(sigma, sigma_size);
 	
@@ -109,7 +105,6 @@ cleanup:
 }
 
 static int write_cpor_t(CPOR_params *myparams, FILE *tfile, CPOR_key *key, CPOR_t *t){
-	
 	unsigned char *enc_input = NULL;
 	unsigned char *tbytes = NULL;
 	unsigned char *t0 = NULL;
@@ -187,8 +182,7 @@ cleanup:
 	return 0;
 }
 
-static CPOR_t *read_cpor_t(CPOR_params *myparams, FILE *tfile, CPOR_key *key){
-	
+static CPOR_t *read_cpor_t(CPOR_params *myparams, CPOR_key *key){
 	CPOR_t *t = NULL;
 	unsigned char *tbytes = NULL;
 	unsigned char *t0 = NULL;
@@ -202,17 +196,18 @@ static CPOR_t *read_cpor_t(CPOR_params *myparams, FILE *tfile, CPOR_key *key){
 	size_t plaintext_size = 0;
 	size_t alpha_size = 0;
 	int i = 0;
+	unsigned long data_index = 0;
 	
-	if(!tfile) return 0;
+	if(!myparams->t_data) return 0;
 	
 	if( ((t = allocate_cpor_t(myparams)) == NULL)) goto cleanup;
 	
-	/* Read t out of the file */
-	fread(&tbytes_size, sizeof(size_t), 1, tfile);
-	if(ferror(tfile)) goto cleanup;
+	memcpy(&tbytes_size, myparams->t_data + data_index, sizeof(size_t));
+	data_index += sizeof(size_t);
+
 	if( ((tbytes = malloc(tbytes_size)) == NULL)) goto cleanup;
-	fread(tbytes, tbytes_size, 1, tfile);
-	if(ferror(tfile)) goto cleanup;
+	memcpy(tbytes, myparams->t_data + data_index, tbytes_size);
+	data_index += tbytes_size;
 
 	/* Parse t */
 	memcpy(&t0_size, tbytes, sizeof(size_t));
@@ -274,7 +269,6 @@ struct thread_arguments{
 };
 
 void *cpor_tag_thread(void *threadargs_ptr){
-
 	CPOR_tag *tag = NULL;
 	int block;
 	int *ret = NULL;
@@ -314,12 +308,10 @@ cleanup:
 
 #endif 
 
-
 /* cpor_tag_file:
 */
 int cpor_tag_file(CPOR_params *myparams, char *filepath, size_t filepath_len, char *keyfilepath,
                   char *tagfilepath, size_t tagfilepath_len, char *tfilepath, size_t tfilepath_len){
-
 	CPOR_key *key = NULL;
 
 	CPOR_t *t = NULL;
@@ -502,70 +494,48 @@ cleanup:
 }
 
 CPOR_challenge *cpor_challenge_file(CPOR_params *myparams){
-
 	CPOR_key *key = NULL;
 	CPOR_challenge *challenge = NULL;
-	FILE *tfile = NULL;
 	CPOR_t *t = NULL;
-
-	if(!myparams->filename) return NULL;
-	
-	/* Open the t file for reading */
-	tfile = fopen(myparams->t_filename, "rb");
-	if(!tfile){
-		fprintf(stderr, "ERROR: Was not able to open %s for reading.\n", myparams->t_filename);
-		goto cleanup;
-	}
 	
 	/* Get the CPOR keys */
 	key = cpor_get_keys(myparams);
 	if(!key) goto cleanup;
 	
 	/* Get t for n (the number of blocks) */
-	t = read_cpor_t(myparams, tfile, key);
+	t = read_cpor_t(myparams, key);
 	if(!t){ fprintf(stderr, "Could not get t.\n"); goto cleanup; }
 
 	challenge = cpor_create_challenge(myparams, key->global, t->n);
 	if(!challenge) goto cleanup;
 
 	if(key) destroy_cpor_key(myparams, key);
-	if(tfile) fclose(tfile);
 	if(t) destroy_cpor_t(myparams, t);
 	
 	return challenge;
 
 cleanup:
 	if(key) destroy_cpor_key(myparams, key);
-	if(tfile) fclose(tfile);
 	if(t) destroy_cpor_t(myparams, t);
 	return NULL;
-	
 }
 
 CPOR_proof *cpor_prove_file(CPOR_params *myparams, CPOR_challenge *challenge){
 	CPOR_tag *tag = NULL;
 	CPOR_proof *proof = NULL;
 	FILE *file = NULL;
-	FILE *tagfile = NULL;
 	unsigned char block[myparams->block_size];
 	int i = 0;
 	
 	if(!myparams->filename || !challenge) return 0;
 	if(strlen(myparams->filename) >= MAXPATHLEN) return 0;
-	if(strlen(myparams->tag_filename) >= MAXPATHLEN) return 0;
 	
 	memset(block, 0, myparams->block_size);
 
 	file = fopen(myparams->filename, "rb");
 	if(!file){
 		fprintf(stderr, "ERROR: Was unable to open %s\n", myparams->filename);
-		return 0;
-	}
-	
-	tagfile = fopen(myparams->tag_filename, "rb");
-	if(!tagfile){
-		fprintf(stderr, "ERROR: Was unable to open %s\n", myparams->tag_filename);
-		return 0;
+		return NULL;
 	}
 	
 	for(i = 0; i < challenge->l; i++){
@@ -579,26 +549,23 @@ CPOR_proof *cpor_prove_file(CPOR_params *myparams, CPOR_challenge *challenge){
 		if(ferror(file)) goto cleanup;
 		
 		/* Read tag for data block at I[i] */
-		tag = read_cpor_tag(tagfile, challenge->I[i]);
+		tag = read_cpor_tag(myparams->tag_data, challenge->I[i]);
 		if(!tag) goto cleanup;
 		
 		proof = cpor_create_proof_update(myparams, challenge, proof, tag, block, challenge->I[i], i);
 		if(!proof) goto cleanup;
 		
 		destroy_cpor_tag(tag);
-		
 	}
 	
 	proof = cpor_create_proof_final(proof);
 	
 	if(file) fclose(file);
-	if(tagfile) fclose(tagfile);
 
 	return proof;
 
 cleanup:
 	if(file) fclose(file);
-	if(tagfile) fclose(tagfile);
 	if(tag) destroy_cpor_tag(tag);
 
 	return NULL;
@@ -607,24 +574,16 @@ cleanup:
 int cpor_verify_file(CPOR_params *myparams, CPOR_challenge *challenge, CPOR_proof *proof){
 	CPOR_key *key = NULL;
 	CPOR_t *t = NULL;
-	FILE *tfile = NULL;
 	int ret = -1;
 	
 	if(!myparams->filename || !challenge || !proof) return -1;
-	
-	/* Open the t file for reading */
-	tfile = fopen(myparams->t_filename, "rb");
-	if(!tfile){
-		fprintf(stderr, "ERROR: Was not able to open %s for reading.\n", myparams->t_filename);
-		goto cleanup;
-	}
 	
 	/* Get the CPOR keys */
 	key = cpor_get_keys(myparams);
 	if(!key) goto cleanup;
 	
 	/* Get t */
-	t = read_cpor_t(myparams, tfile, key);
+	t = read_cpor_t(myparams, key);
 	if(!t) goto cleanup;
 	
 	ret = cpor_verify_proof(myparams, challenge->global, proof, challenge, t->k_prf, t->alpha);
@@ -632,7 +591,6 @@ int cpor_verify_file(CPOR_params *myparams, CPOR_challenge *challenge, CPOR_proo
 cleanup:
 	if(key) destroy_cpor_key(myparams, key);
 	if(t) destroy_cpor_t(myparams, t);
-	fclose(tfile);
 	
 	return ret;
 }

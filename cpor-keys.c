@@ -31,7 +31,6 @@
 #include "cpor.h"
 
 CPOR_key *allocate_cpor_key(CPOR_params *myparams){
-
 	CPOR_key *key = NULL;
 
 	if( ((key = malloc(sizeof(CPOR_key))) == NULL)) goto cleanup;
@@ -46,11 +45,9 @@ CPOR_key *allocate_cpor_key(CPOR_params *myparams){
 cleanup:
 	if(key) destroy_cpor_key(myparams, key);
 	return NULL;
-	
 }
 
 void destroy_cpor_key(CPOR_params *myparams, CPOR_key *key){
-
 	if(!key) return;
 	if(key->k_enc) sfree(key->k_enc, myparams->enc_key_size);
 	key->k_enc_size = 0;
@@ -62,55 +59,50 @@ void destroy_cpor_key(CPOR_params *myparams, CPOR_key *key){
 
 //Read keys from disk
 CPOR_key *cpor_get_keys(CPOR_params *myparams){
-
 	CPOR_key *key = NULL;
-	FILE *keyfile = NULL;
 	size_t Zp_size = 0;
 	unsigned char *Zp = NULL;
+	unsigned long data_index = 0;
 
 	if( ((key = allocate_cpor_key(myparams)) == NULL)) goto cleanup;
 	if( ((key->global = allocate_cpor_global()) == NULL)) goto cleanup;
-
-	keyfile = fopen(myparams->key_filename, "rb");
-	if(!keyfile){
-		fprintf(stderr, "ERROR: Was not able to read keyfile.\n");
-		goto cleanup;
-	}
 	
-	fread(&key->k_enc_size, sizeof(size_t), 1, keyfile);
-	if(ferror(keyfile)) goto cleanup;
-	fread(key->k_enc, key->k_enc_size, 1, keyfile);
-	if(ferror(keyfile)) goto cleanup;
-	fread(&key->k_mac_size, sizeof(size_t), 1, keyfile);
-	if(ferror(keyfile)) goto cleanup;
-	fread(key->k_mac, key->k_mac_size, 1, keyfile);
-	if(ferror(keyfile)) goto cleanup;
+	memcpy(&key->k_enc_size, myparams->key_data + data_index, sizeof(size_t));
+	data_index += sizeof(size_t);
+	
+	memcpy(key->k_enc, myparams->key_data + data_index, key->k_enc_size);
+	data_index += key->k_enc_size;
 
-	fread(&Zp_size, sizeof(size_t), 1, keyfile);
-	if(ferror(keyfile)) goto cleanup;
+	memcpy(&key->k_mac_size, myparams->key_data + data_index, sizeof(size_t));
+	data_index += sizeof(size_t);
+
+	memcpy(key->k_mac, myparams->key_data + data_index, key->k_mac_size);
+	data_index += key->k_mac_size;
+
+	memcpy(&Zp_size, myparams->key_data + data_index, sizeof(size_t));
+	data_index += sizeof(size_t);
+
 	if( ((Zp = malloc(Zp_size)) == NULL)) goto cleanup;
 	memset(Zp, 0, Zp_size);
-	fread(Zp, Zp_size, 1, keyfile);
-	if(ferror(keyfile)) goto cleanup;
+
+	memcpy(Zp, myparams->key_data + data_index, Zp_size);
+	data_index += Zp_size;
+
 	if(!BN_bin2bn(Zp, Zp_size, key->global->Zp)) goto cleanup;
 	
 	if(Zp) sfree(Zp, Zp_size);
-	if(keyfile) fclose(keyfile);
 	
 	return key;
 	
 cleanup:
 	if(Zp) sfree(Zp, Zp_size);
-	if(keyfile) fclose(keyfile);
 	if(key) destroy_cpor_key(myparams, key);
 	return NULL;
 }
 
-
 //TODO:  This is totally insecure -- keys are written unencrypted to the disk.  Take a look at the PDP key stuff.  
 /* Create and write keys.*/
-CPOR_key *cpor_create_new_keys(CPOR_params *myparams){
-
+CPOR_key *cpor_create_new_keys(CPOR_params *myparams, char *key_filename){
 	CPOR_key *key = NULL;
 	FILE *keyfile = NULL;
 	size_t Zp_size = 0;
@@ -123,18 +115,8 @@ CPOR_key *cpor_create_new_keys(CPOR_params *myparams){
 	key->k_enc_size = myparams->enc_key_size;
 	if(!RAND_bytes(key->k_mac, myparams->mac_key_size)) goto cleanup;
 	key->k_mac_size = myparams->mac_key_size;
-	
-	/* Check to see if the key file exists */
-	//TODO, fix this
-	/*
-	if( (access(myparams->key_filename, F_OK) == 0)){
-		printf("WARNING: Key files for %s already exist; do you want to overwite (y/N)?", filepath);
-		scanf("%c", &yesorno);
-		if(yesorno != 'y') goto exit;
-	}
-	*/
-	
-	keyfile = fopen(myparams->key_filename, "wb");
+
+	keyfile = fopen(key_filename, "wb");
 	if(!keyfile){
 		fprintf(stderr, "ERROR: Was not able to create keyfile.\n");
 		goto cleanup;
