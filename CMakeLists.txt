@@ -12,9 +12,9 @@ set(CMAKE_C_FLAGS "-g3 -pthread")
 ELSEIF(WIN32)
 
 set(CMAKE_C_FLAGS "-g3")
-include_directories(depends/include)
+include_directories(depends/win32/include)
 include_directories("C:/Program Files/Mingw-w64/opt/include")
-link_directories(depends/lib)
+link_directories(depends/win32/lib)
 link_directories("C:/Program Files/Mingw-w64/opt/lib")
 
 ENDIF()
