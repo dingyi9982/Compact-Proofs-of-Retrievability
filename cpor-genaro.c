@@ -132,7 +132,7 @@ static size_t read_callback(void *ptr, size_t size, size_t nmemb, void *stream)
 ret: 0 - Cheating, 1 - Verified, -1 - error.
 */
 int cpor_verify(char *filename, char *key_data, char *t_data, char *tag_data,
-				   unsigned int lambda, unsigned int block_size)
+				unsigned int lambda, unsigned int block_size)
 {
 	CPOR_params *myparams = (CPOR_params *)malloc(sizeof(CPOR_params));
 	CPOR_challenge *challenge = NULL;
@@ -190,6 +190,23 @@ int cpor_verify(char *filename, char *key_data, char *t_data, char *tag_data,
 
 	return ret;
 }
+#ifdef _WIN32
+char *EncodingConvert(const char* strIn, int sourceCodepage, int targetCodepage)
+{
+	int unicodeLen = MultiByteToWideChar(sourceCodepage, 0, strIn, -1, NULL, 0);
+	wchar_t* pUnicode;
+	pUnicode = (wchar_t *)malloc((unicodeLen + 1) * sizeof(wchar_t));
+	memset(pUnicode, 0, (unicodeLen + 1) * sizeof(wchar_t));
+	MultiByteToWideChar(sourceCodepage, 0, strIn, -1, (LPWSTR)pUnicode, unicodeLen);
+	char * pTargetData = NULL;
+	int targetLen = WideCharToMultiByte(targetCodepage, 0, (LPWSTR)pUnicode, -1, pTargetData, 0, NULL, NULL);
+	pTargetData = (BYTE *)malloc((targetLen + 1) * sizeof(BYTE));
+	memset(pTargetData, 0, targetLen + 1);
+	WideCharToMultiByte(targetCodepage, 0, (LPWSTR)pUnicode, -1, pTargetData, targetLen, NULL, NULL);
+	free(pUnicode);
+	return pTargetData;
+}
+#endif
 
 void main()
 {
@@ -219,7 +236,15 @@ void main()
 	fclose(t_file);
 	fclose(tag_file);
 
-	int success = cpor_verify("/Users/dingyi/10兆.data", key_data, t_data, tag_data, 80, 4096);
+#if defined __APPLE__
+	char *filename = "/Users/dingyi/10兆.data";
+#elif defined __linux__
+	char *filename = "/media/psf/Home/10兆.data";
+#elif defined _WIN32
+	char *filename = EncodingConvert("Y:/10兆.data", CP_UTF8, CP_ACP);
+#endif 
+
+	int success = cpor_verify(filename, key_data, t_data, tag_data, 80, 4096);
 	if(success == 1) {
 		printf("Verified!\n");
 	} else if(success == 0) {
@@ -228,6 +253,9 @@ void main()
 		printf("Error!\n");
 	}
 
+#if defined _WIN32
+    free(filename);
+#endif
 	free(key_data);
 	free(t_data);
 	free(tag_data);
