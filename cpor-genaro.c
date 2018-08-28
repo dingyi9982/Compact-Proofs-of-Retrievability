@@ -131,7 +131,6 @@ static size_t read_callback(void *ptr, size_t size, size_t nmemb, void *stream)
 /*
 ret: 0 - Cheating, 1 - Verified, -1 - error.
 */
-// int cpor_challenge(CPOR_params *myparams)
 int cpor_challenge(char *filename, char *key_filename, char *t_filename, char *tag_filename, 
 				   unsigned int lambda, unsigned int block_size)
 {
