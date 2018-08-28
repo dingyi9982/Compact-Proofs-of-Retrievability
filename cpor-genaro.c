@@ -28,9 +28,9 @@
 */
 
 #include "cpor.h"
+#include "headers.h"
 #include <getopt.h>
 #include <curl/curl.h>
-
 
 static struct option longopts[] = {
 	{"numchallenge", no_argument, NULL, 'l'},
