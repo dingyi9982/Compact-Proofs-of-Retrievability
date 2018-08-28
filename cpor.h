@@ -95,8 +95,9 @@ struct CPOR_parameters_struct{
 
 		char *server;
 
-		char *tag_filename;
+		char *key_filename;
 		char *t_filename;
+		char *tag_filename;
 };
 
 extern CPOR_params params;
@@ -154,13 +155,13 @@ struct CPOR_proof_struct{
 };
 
 /* File-level CPOR functions from cpor-file.c */
-int cpor_tag_file(char *filepath, size_t filepath_len, char *tagfilepath, size_t tagfilepath_len, char *tfilepath, size_t tfilepath_len);
+int cpor_tag_file(CPOR_params *myparams, char *filepath, size_t filepath_len, char *keyfilepath, char *tagfilepath, size_t tagfilepath_len, char *tfilepath, size_t tfilepath_len);
 
-CPOR_challenge *cpor_challenge_file(char *filepath, size_t filepath_len, char *tfilepath, size_t tfilepath_len);
+CPOR_challenge *cpor_challenge_file(CPOR_params *myparams);
 
-CPOR_proof *cpor_prove_file(char *filepath, size_t filepath_len, char *tagfilepath, size_t tagfilepath_len, CPOR_challenge *challenge);
+CPOR_proof *cpor_prove_file(CPOR_params *myparams, CPOR_challenge *challenge);
 
-int cpor_verify_file(char *filepath, size_t filepath_len, char *tfilepath, size_t tfilepath_len, CPOR_challenge *challenge, CPOR_proof *proof);
+int cpor_verify_file(CPOR_params *myparams, CPOR_challenge *challenge, CPOR_proof *proof);
 
 CPOR_tag *read_cpor_tag(FILE *tagfile, unsigned int index);
 
@@ -171,20 +172,20 @@ CPOR_key *cpor_create_new_keys();
 /* Core CPOR functions from cpor-core.c */
 CPOR_global *cpor_create_global(unsigned int bits);
 
-CPOR_tag *cpor_tag_block(CPOR_global *global, unsigned char *k_prf, BIGNUM **alpha, unsigned char *block, unsigned int index);
+CPOR_tag *cpor_tag_block(CPOR_params *myparams, CPOR_global *global, unsigned char *k_prf, BIGNUM **alpha, unsigned char *block, unsigned int index);
 
-CPOR_challenge *cpor_create_challenge(CPOR_global *global, unsigned int n);
+CPOR_challenge *cpor_create_challenge(CPOR_params *myparams, CPOR_global *global, unsigned int n);
 
-CPOR_proof *cpor_create_proof_update(CPOR_challenge *challenge, CPOR_proof *proof, CPOR_tag *tag, unsigned char *block, unsigned int index, unsigned int i);
+CPOR_proof *cpor_create_proof_update(CPOR_params *myparams, CPOR_challenge *challenge, CPOR_proof *proof, CPOR_tag *tag, unsigned char *block, unsigned int index, unsigned int i);
 
 CPOR_proof *cpor_create_proof_final(CPOR_proof *proof);
 
-int cpor_verify_proof(CPOR_global *global, CPOR_proof *proof, CPOR_challenge *challenge, unsigned char *k_prf, BIGNUM **alpha);
+int cpor_verify_proof(CPOR_params *myparams, CPOR_global *global, CPOR_proof *proof, CPOR_challenge *challenge, unsigned char *k_prf, BIGNUM **alpha);
 
 /* Key functions from cpor-keys.c */
-CPOR_key *cpor_get_keys();
+CPOR_key *cpor_get_keys(CPOR_params *myparams);
 
-void destroy_cpor_key(CPOR_key *key);
+void destroy_cpor_key(CPOR_params *myparams, CPOR_key *key);
 
 /* Helper functions from cpor-misc.c */
 
@@ -200,12 +201,12 @@ int decrypt_and_verify_secrets(CPOR_key *key, unsigned char *input, size_t input
 
 int encrypt_and_authentucate_secrets(CPOR_key *key, unsigned char *input, size_t input_len, unsigned char *ciphertext, size_t *ciphertext_len, unsigned char *authenticator, size_t *authenticator_len);
 
-CPOR_t *cpor_create_t(CPOR_global *global, unsigned int n);
+CPOR_t *cpor_create_t(CPOR_params *myparams, CPOR_global *global, unsigned int n);
 
-BIGNUM *generate_prf_i(unsigned char *key, unsigned int index);
+BIGNUM *generate_prf_i(CPOR_params *myparams, unsigned char *key, unsigned int index);
 
 CPOR_proof *allocate_cpor_proof();
-void destroy_cpor_proof(CPOR_proof *proof);
+void destroy_cpor_proof(CPOR_params *myparams, CPOR_proof *proof);
 
 void destroy_cpor_challenge(CPOR_challenge *challenge);
 CPOR_challenge *allocate_cpor_challenge(unsigned int l);
@@ -213,10 +214,15 @@ CPOR_challenge *allocate_cpor_challenge(unsigned int l);
 void destroy_cpor_tag(CPOR_tag *tag);
 CPOR_tag *allocate_cpor_tag();
 
-void destroy_cpor_t(CPOR_t *t);
-CPOR_t *allocate_cpor_t();
+void destroy_cpor_t(CPOR_params *myparams, CPOR_t *t);
+CPOR_t *allocate_cpor_t(CPOR_params *myparams);
 
 void destroy_cpor_global(CPOR_global *global);
 CPOR_global *allocate_cpor_global();
+
+int cpor_challenge(char *filename, char *key_filename, char *t_filename, char *tag_filename, 
+				   unsigned int lambda, unsigned int block_size);
+				   
+void cpor_test();
 
 #endif

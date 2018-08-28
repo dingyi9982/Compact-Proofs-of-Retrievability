@@ -61,7 +61,7 @@ int get_rand_range(unsigned int min, unsigned int max, unsigned int *value){
  * It returns an allocated BIGNUM containing the resulting PRF or NULL on failure.
  * In this implementation we use HMAC-SHA1.
  */
-BIGNUM *generate_prf_i(unsigned char *key, unsigned int index){
+BIGNUM *generate_prf_i(CPOR_params *myparams, unsigned char *key, unsigned int index){
 	
 	unsigned char *prf_result = NULL;
 	size_t prf_result_size = 0;
@@ -75,7 +75,7 @@ BIGNUM *generate_prf_i(unsigned char *key, unsigned int index){
 	if( ((prf_result_bn = BN_new()) == NULL)) goto cleanup;
 	
 	/* Do the HMAC-SHA1 */
-	if(!HMAC(EVP_sha1(), key, params.prf_key_size, (unsigned char *)&index, sizeof(unsigned int),
+	if(!HMAC(EVP_sha1(), key, myparams->prf_key_size, (unsigned char *)&index, sizeof(unsigned int),
 		prf_result, (unsigned int *)&prf_result_size)) goto cleanup;
 		
 	/* Convert PRF result into a BIGNUM */
@@ -215,17 +215,17 @@ cleanup:
 	
 }
 
-CPOR_t *cpor_create_t(CPOR_global *global, unsigned int n){
+CPOR_t *cpor_create_t(CPOR_params *myparams, CPOR_global *global, unsigned int n){
 
 	CPOR_t *t = NULL;
 	int i = 0;
 	
-	if( ((t = allocate_cpor_t()) == NULL)) goto cleanup;
+	if( ((t = allocate_cpor_t(myparams)) == NULL)) goto cleanup;
 	
 	/* Generate a random PRF key, k_prf */
-	if(!RAND_bytes(t->k_prf, params.prf_key_size)) goto cleanup;
+	if(!RAND_bytes(t->k_prf, myparams->prf_key_size)) goto cleanup;
 
-	for(i = 0; i < params.num_sectors; i++)
+	for(i = 0; i < myparams->num_sectors; i++)
 		if(!BN_rand_range(t->alpha[i], global->Zp)) goto cleanup;
 	
 	t->n = n;
@@ -233,7 +233,7 @@ CPOR_t *cpor_create_t(CPOR_global *global, unsigned int n){
 	return t;
 	
 cleanup:
-	if(t) destroy_cpor_t(t);
+	if(t) destroy_cpor_t(myparams, t);
 	return NULL;
 }
 
@@ -332,22 +332,22 @@ cleanup:
 	
 }
 
-void destroy_cpor_t(CPOR_t *t){
+void destroy_cpor_t(CPOR_params *myparams, CPOR_t *t){
 
 	int i;
 
 	if(!t) return;
-	if(t->k_prf) sfree(t->k_prf, params.prf_key_size);
+	if(t->k_prf) sfree(t->k_prf, myparams->prf_key_size);
 	if(t->alpha){
-		for(i = 0; i < params.num_sectors; i++)
+		for(i = 0; i < myparams->num_sectors; i++)
 			if(t->alpha[i]) BN_clear_free(t->alpha[i]);
-		sfree(t->alpha, sizeof(BIGNUM *) * params.num_sectors);
+		sfree(t->alpha, sizeof(BIGNUM *) * myparams->num_sectors);
 	}
 	t->n = 0;
 	sfree(t, sizeof(CPOR_t));
 }
 
-CPOR_t *allocate_cpor_t(){
+CPOR_t *allocate_cpor_t(CPOR_params *myparams){
 
 	CPOR_t *t = NULL;
 	int i = 0;
@@ -355,37 +355,37 @@ CPOR_t *allocate_cpor_t(){
 	if( ((t = malloc(sizeof(CPOR_t))) == NULL)) return NULL;
 	memset(t, 0, sizeof(CPOR_t));
 	t->n = 0;
-	if( ((t->k_prf = malloc(params.prf_key_size)) == NULL)) goto cleanup;
-	if( ((t->alpha = malloc(sizeof(BIGNUM *) * params.num_sectors)) == NULL)) goto cleanup;
-	memset(t->alpha, 0, sizeof(BIGNUM *) * params.num_sectors);	
-	for(i = 0; i < params.num_sectors; i++){
+	if( ((t->k_prf = malloc(myparams->prf_key_size)) == NULL)) goto cleanup;
+	if( ((t->alpha = malloc(sizeof(BIGNUM *) * myparams->num_sectors)) == NULL)) goto cleanup;
+	memset(t->alpha, 0, sizeof(BIGNUM *) * myparams->num_sectors);	
+	for(i = 0; i < myparams->num_sectors; i++){
 		t->alpha[i] = BN_new();
 	}
 	
 	return t;
 
 cleanup:
-	destroy_cpor_t(t);
+	destroy_cpor_t(myparams, t);
 	return NULL;
 	
 }
 
-void destroy_cpor_proof(CPOR_proof *proof){
+void destroy_cpor_proof(CPOR_params *myparams, CPOR_proof *proof){
 
 	int i = 0;
 
 	if(!proof) return;
 	if(proof->sigma) BN_clear_free(proof->sigma);
 	if(proof->mu){
-		for(i = 0; i < params.num_sectors; i++){
+		for(i = 0; i < myparams->num_sectors; i++){
 			if(proof->mu[i]) BN_clear_free(proof->mu[i]);
 		}
-		sfree(proof->mu, sizeof(BIGNUM *) * params.num_sectors);
+		sfree(proof->mu, sizeof(BIGNUM *) * myparams->num_sectors);
 	}
 	sfree(proof, sizeof(CPOR_proof));
 }
 
-CPOR_proof *allocate_cpor_proof(){
+CPOR_proof *allocate_cpor_proof(CPOR_params *myparams){
 
 	CPOR_proof *proof = NULL;
 	int i = 0;
@@ -393,17 +393,14 @@ CPOR_proof *allocate_cpor_proof(){
 	if( ((proof = malloc(sizeof(CPOR_proof))) == NULL)) return NULL;
 	memset(proof, 0, sizeof(CPOR_proof));
 	if( ((proof->sigma = BN_new()) == NULL )) goto cleanup;
-	if( ((proof->mu = malloc(sizeof(BIGNUM *) * params.num_sectors)) == NULL)) goto cleanup;
-	memset(proof->mu, 0, sizeof(BIGNUM *) * params.num_sectors);
-	for(i = 0; i < params.num_sectors; i++)
+	if( ((proof->mu = malloc(sizeof(BIGNUM *) * myparams->num_sectors)) == NULL)) goto cleanup;
+	memset(proof->mu, 0, sizeof(BIGNUM *) * myparams->num_sectors);
+	for(i = 0; i < myparams->num_sectors; i++)
 		if( ((proof->mu[i] = BN_new()) == NULL)) goto cleanup;
 
 	return proof;
 
 cleanup:
-	destroy_cpor_proof(proof);
-	return NULL;	
-
-	
+	destroy_cpor_proof(myparams, proof);
+	return NULL;		
 }
-

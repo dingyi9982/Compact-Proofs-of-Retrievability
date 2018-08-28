@@ -61,7 +61,7 @@ cleanup:
 * NOTE: the tag structure contains two secrets, k_prf (the key to the PRF) and alpha (a randomly chosen value to
 * blind the message.
 */
-CPOR_tag *cpor_tag_block(CPOR_global *global, unsigned char *k_prf, BIGNUM **alpha, unsigned char *block, unsigned int index){
+CPOR_tag *cpor_tag_block(CPOR_params *myparams, CPOR_global *global, unsigned char *k_prf, BIGNUM **alpha, unsigned char *block, unsigned int index){
 
 	CPOR_tag *tag = NULL;
 	BN_CTX * ctx = NULL;
@@ -83,18 +83,18 @@ CPOR_tag *cpor_tag_block(CPOR_global *global, unsigned char *k_prf, BIGNUM **alp
 	if( ((sum = BN_new()) == NULL)) goto cleanup;
 	
 	/* compute PRF_k(i) */
-	if( ((prf_i = generate_prf_i(k_prf, index)) == NULL)) goto cleanup;
+	if( ((prf_i = generate_prf_i(myparams, k_prf, index)) == NULL)) goto cleanup;
 	
 	BN_clear(sum);
 	/* Sum all alpha * sector products */
-	for(j = 0; j < params.num_sectors; j++){
+	for(j = 0; j < myparams->num_sectors; j++){
 		size_t sector_size = 0;
-		unsigned char *sector = block + (j * params.sector_size);
+		unsigned char *sector = block + (j * myparams->sector_size);
 
-		if( (params.block_size - (j * params.sector_size)) > params.sector_size)
-			sector_size = params.sector_size;
+		if( (myparams->block_size - (j * myparams->sector_size)) > myparams->sector_size)
+			sector_size = myparams->sector_size;
 		else
-			sector_size = (params.block_size - (j * params.sector_size));
+			sector_size = (myparams->block_size - (j * myparams->sector_size));
 		
 		/* Convert the sector into a BIGNUM */
 		if(!BN_bin2bn(sector, sector_size, message)) goto cleanup;
@@ -139,7 +139,7 @@ cleanup:
 /* cpor_create_challenge: Create a random challenge to send to the prover.  Takes in n, the number of blocks in the file.
 *  Returns an allocated and populated CPOR_challenge struct or NULL on failure.
 */
-CPOR_challenge *cpor_create_challenge(CPOR_global *global, unsigned int n){
+CPOR_challenge *cpor_create_challenge(CPOR_params *myparams, CPOR_global *global, unsigned int n){
 
 	CPOR_challenge *challenge;
 	int i = 0;
@@ -152,8 +152,8 @@ CPOR_challenge *cpor_create_challenge(CPOR_global *global, unsigned int n){
 	if(!global->Zp) return NULL;
 	
 	/* Set l, the number of challenge blocks. */
-	if(n > params.num_challenge)
-		l = params.num_challenge;
+	if(n > myparams->num_challenge)
+		l = myparams->num_challenge;
 	else
 		l = n;
 	
@@ -200,7 +200,7 @@ CPOR_proof *cpor_create_proof_final(CPOR_proof *proof){
 }
 
 /* For each message index i, call update (we're going to call this challenge->l times */
-CPOR_proof *cpor_create_proof_update(CPOR_challenge *challenge, CPOR_proof *proof, CPOR_tag *tag, unsigned char *block, unsigned int index, unsigned int i){
+CPOR_proof *cpor_create_proof_update(CPOR_params *myparams, CPOR_challenge *challenge, CPOR_proof *proof, CPOR_tag *tag, unsigned char *block, unsigned int index, unsigned int i){
 
 	BN_CTX * ctx = NULL;
 	BIGNUM *message = NULL;
@@ -216,14 +216,14 @@ CPOR_proof *cpor_create_proof_update(CPOR_challenge *challenge, CPOR_proof *proo
 	if( ((product = BN_new()) == NULL)) goto cleanup;
 	
 	/* Calculate and update the mu's */	
-	for(j = 0; j < params.num_sectors; j++){
+	for(j = 0; j < myparams->num_sectors; j++){
 		size_t sector_size = 0;
-		unsigned char *sector = block + (j * params.sector_size);
+		unsigned char *sector = block + (j * myparams->sector_size);
 
-		if( (params.block_size - (j * params.sector_size)) > params.sector_size)
-			sector_size = params.sector_size;
+		if( (myparams->block_size - (j * myparams->sector_size)) > myparams->sector_size)
+			sector_size = myparams->sector_size;
 		else
-			sector_size = (params.block_size - (j * params.sector_size));
+			sector_size = (myparams->block_size - (j * myparams->sector_size));
 
 		/* Convert the sector into a BIGNUM */
 		if(!BN_bin2bn(sector, (unsigned int)sector_size, message)) goto cleanup;
@@ -253,7 +253,7 @@ CPOR_proof *cpor_create_proof_update(CPOR_challenge *challenge, CPOR_proof *proo
 	return proof;
 
 cleanup:
-	if(proof) destroy_cpor_proof(proof);
+	if(proof) destroy_cpor_proof(myparams, proof);
 	if(message) BN_clear_free(message);
 	if(product) BN_clear_free(product);
 	if(ctx) BN_CTX_free(ctx);
@@ -262,7 +262,7 @@ cleanup:
 }
 
 
-int cpor_verify_proof(CPOR_global *global, CPOR_proof *proof, CPOR_challenge *challenge, unsigned char *k_prf, BIGNUM **alpha){
+int cpor_verify_proof(CPOR_params *myparams, CPOR_global *global, CPOR_proof *proof, CPOR_challenge *challenge, unsigned char *k_prf, BIGNUM **alpha){
 
 	BN_CTX * ctx = NULL;
 	BIGNUM *prf_i = NULL;
@@ -279,7 +279,7 @@ int cpor_verify_proof(CPOR_global *global, CPOR_proof *proof, CPOR_challenge *ch
 	/* Compute the summation of all the products (nu_i * PRF_k(i)) */
 	for(i = 0; i < challenge->l; i++){
 		/* compute PRF_k(i) */
-		if( ((prf_i = generate_prf_i(k_prf, challenge->I[i])) == NULL)) goto cleanup;
+		if( ((prf_i = generate_prf_i(myparams, k_prf, challenge->I[i])) == NULL)) goto cleanup;
 
 		/* Multiply prf_i by nu_i */
 		if(!BN_mod_mul(product, challenge->nu[i], prf_i, global->Zp, ctx)) goto cleanup;
@@ -291,7 +291,7 @@ int cpor_verify_proof(CPOR_global *global, CPOR_proof *proof, CPOR_challenge *ch
 	}
 	
 	/* Compute the summation of all the products (alpha_j * mu_j) */
-	for(j = 0; j < params.num_sectors; j++){
+	for(j = 0; j < myparams->num_sectors; j++){
 		
 		/* Multiply alpha_j by mu_j */
 		if(!BN_mod_mul(product, alpha[j], proof->mu[j], global->Zp, ctx)) goto cleanup;	
@@ -317,12 +317,4 @@ cleanup:
 	if(ctx) BN_CTX_free(ctx);
 		
 	return -1;
-
 }
-
-
-
-
-
-
-

@@ -30,50 +30,50 @@
 
 #include "cpor.h"
 
-CPOR_key *allocate_cpor_key(){
+CPOR_key *allocate_cpor_key(CPOR_params *myparams){
 
 	CPOR_key *key = NULL;
 
 	if( ((key = malloc(sizeof(CPOR_key))) == NULL)) goto cleanup;
-	if( ((key->k_enc = malloc(params.enc_key_size)) == NULL)) goto cleanup;
-	key->k_enc_size = params.enc_key_size;
-	if( ((key->k_mac = malloc(params.mac_key_size)) == NULL)) goto cleanup;
-	key->k_mac_size = params.mac_key_size;
+	if( ((key->k_enc = malloc(myparams->enc_key_size)) == NULL)) goto cleanup;
+	key->k_enc_size = myparams->enc_key_size;
+	if( ((key->k_mac = malloc(myparams->mac_key_size)) == NULL)) goto cleanup;
+	key->k_mac_size = myparams->mac_key_size;
 	key->global = NULL;
 	
 	return key;
 	
 cleanup:
-	if(key) destroy_cpor_key(key);
+	if(key) destroy_cpor_key(myparams, key);
 	return NULL;
 	
 }
 
-void destroy_cpor_key(CPOR_key *key){
+void destroy_cpor_key(CPOR_params *myparams, CPOR_key *key){
 
 	if(!key) return;
-	if(key->k_enc) sfree(key->k_enc, params.enc_key_size);
+	if(key->k_enc) sfree(key->k_enc, myparams->enc_key_size);
 	key->k_enc_size = 0;
-	if(key->k_mac) sfree(key->k_mac, params.mac_key_size);
+	if(key->k_mac) sfree(key->k_mac, myparams->mac_key_size);
 	key->k_mac_size = 0;
 	if(key->global) destroy_cpor_global(key->global);
 	sfree(key, sizeof(CPOR_key));
 }
 
 //Read keys from disk
-CPOR_key *cpor_get_keys(){
+CPOR_key *cpor_get_keys(CPOR_params *myparams){
 
 	CPOR_key *key = NULL;
 	FILE *keyfile = NULL;
 	size_t Zp_size = 0;
 	unsigned char *Zp = NULL;
 
-	if( ((key = allocate_cpor_key()) == NULL)) goto cleanup;
+	if( ((key = allocate_cpor_key(myparams)) == NULL)) goto cleanup;
 	if( ((key->global = allocate_cpor_global()) == NULL)) goto cleanup;
 
-	keyfile = fopen("./cpor.key", "r");
+	keyfile = fopen(myparams->key_filename, "rb");
 	if(!keyfile){
-		fprintf(stderr, "ERROR: Was not able to create keyfile.\n");
+		fprintf(stderr, "ERROR: Was not able to read keyfile.\n");
 		goto cleanup;
 	}
 	
@@ -102,39 +102,39 @@ CPOR_key *cpor_get_keys(){
 cleanup:
 	if(Zp) sfree(Zp, Zp_size);
 	if(keyfile) fclose(keyfile);
-	if(key) destroy_cpor_key(key);
+	if(key) destroy_cpor_key(myparams, key);
 	return NULL;
 }
 
 
 //TODO:  This is totally insecure -- keys are written unencrypted to the disk.  Take a look at the PDP key stuff.  
 /* Create and write keys.*/
-CPOR_key *cpor_create_new_keys(){
+CPOR_key *cpor_create_new_keys(CPOR_params *myparams){
 
 	CPOR_key *key = NULL;
 	FILE *keyfile = NULL;
 	size_t Zp_size = 0;
 	unsigned char *Zp = NULL;
 	
-	if( ((key = allocate_cpor_key()) == NULL)) goto cleanup;
-	if( ((key->global = cpor_create_global(params.Zp_bits)) == NULL)) goto cleanup;
+	if( ((key = allocate_cpor_key(myparams)) == NULL)) goto cleanup;
+	if( ((key->global = cpor_create_global(myparams->Zp_bits)) == NULL)) goto cleanup;
 
-	if(!RAND_bytes(key->k_enc, params.enc_key_size)) goto cleanup;
-	key->k_enc_size = params.enc_key_size;
-	if(!RAND_bytes(key->k_mac, params.mac_key_size)) goto cleanup;
-	key->k_mac_size = params.mac_key_size;
+	if(!RAND_bytes(key->k_enc, myparams->enc_key_size)) goto cleanup;
+	key->k_enc_size = myparams->enc_key_size;
+	if(!RAND_bytes(key->k_mac, myparams->mac_key_size)) goto cleanup;
+	key->k_mac_size = myparams->mac_key_size;
 	
 	/* Check to see if the key file exists */
 	//TODO, fix this
 	/*
-	if( (access("./cpor.key", F_OK) == 0)){
-		fprintf(stdout, "WARNING: Key files for %s already exist; do you want to overwite (y/N)?", filepath);
+	if( (access(myparams->key_filename, F_OK) == 0)){
+		printf("WARNING: Key files for %s already exist; do you want to overwite (y/N)?", filepath);
 		scanf("%c", &yesorno);
 		if(yesorno != 'y') goto exit;
 	}
 	*/
 	
-	keyfile = fopen("./cpor.key", "w");
+	keyfile = fopen(myparams->key_filename, "wb");
 	if(!keyfile){
 		fprintf(stderr, "ERROR: Was not able to create keyfile.\n");
 		goto cleanup;
@@ -162,7 +162,7 @@ CPOR_key *cpor_create_new_keys(){
 	return key;
 
 cleanup:
-	if(key) destroy_cpor_key(key);
+	if(key) destroy_cpor_key(myparams, key);
 	if(keyfile) fclose(keyfile);
 	if(Zp) sfree(Zp, Zp_size);
 	
