@@ -32,23 +32,6 @@
 #include <getopt.h>
 #include <curl/curl.h>
 
-static struct option longopts[] = {
-	{"numchallenge", no_argument, NULL, 'l'},
-	{"lambda", no_argument, NULL, 'y'}, 
-	{"Zp", no_argument, NULL, 'z'},
-	{"prf_key_size", no_argument, NULL, 'p'},
-	{"enc_key_size", no_argument, NULL, 'e'},
-	{"mac_key_size", no_argument, NULL, 'm'},
-	{"blocksize", no_argument, NULL, 'b'},
-	{"sectorsize", no_argument, NULL, 'c'},
-	{"numsectors", no_argument, NULL, 'n'},
-	{"numthreads", no_argument, NULL, 'h'},
-	{"keygen", no_argument, NULL, 'k'}, //TODO optional argument for key location
-	{"tag", no_argument, NULL, 't'},
-	{"verify", no_argument, NULL, 'v'},
-	{NULL, 0, NULL, 0}
-};
-
 static inline char separator()
 {
 #ifdef _WIN32
@@ -56,6 +39,32 @@ static inline char separator()
 #else
     return '/';
 #endif
+}
+char *str_concat_many(int count, ...)
+{
+    int length = 1;
+
+    va_list args;
+    va_start(args, count);
+    for (int i = 0; i < count; i++) {
+        char *item = va_arg(args, char *);
+        length += strlen(item);
+    }
+    va_end(args);
+
+    char *combined = calloc(length, sizeof(char));
+    if (!combined) {
+        return NULL;
+    }
+
+    va_start(args, count);
+    for (int i = 0; i < count; i++) {
+        char *item = va_arg(args, char *);
+        strcat(combined, item);
+    }
+    va_end(args);
+
+    return combined;
 }
 
 char *create_tmp_name(char *extension)
@@ -107,6 +116,24 @@ char *create_tmp_name(char *extension)
     return path;
 }
 
+#ifdef _WIN32
+static char *EncodingConvert(const char* strIn, int sourceCodepage, int targetCodepage)
+{
+	int unicodeLen = MultiByteToWideChar(sourceCodepage, 0, strIn, -1, NULL, 0);
+	wchar_t* pUnicode;
+	pUnicode = (wchar_t *)malloc((unicodeLen + 1) * sizeof(wchar_t));
+	memset(pUnicode, 0, (unicodeLen + 1) * sizeof(wchar_t));
+	MultiByteToWideChar(sourceCodepage, 0, strIn, -1, (LPWSTR)pUnicode, unicodeLen);
+	char * pTargetData = NULL;
+	int targetLen = WideCharToMultiByte(targetCodepage, 0, (LPWSTR)pUnicode, -1, pTargetData, 0, NULL, NULL);
+	pTargetData = (BYTE *)malloc((targetLen + 1) * sizeof(BYTE));
+	memset(pTargetData, 0, targetLen + 1);
+	WideCharToMultiByte(targetCodepage, 0, (LPWSTR)pUnicode, -1, pTargetData, targetLen, NULL, NULL);
+	free(pUnicode);
+	return pTargetData;
+}
+#endif
+
 static size_t read_callback(void *ptr, size_t size, size_t nmemb, void *stream)
 {
     size_t retcode;
@@ -125,31 +152,22 @@ static size_t read_callback(void *ptr, size_t size, size_t nmemb, void *stream)
     return retcode;
 }
 
-/*
-ret: 0 - Cheating, 1 - Verified, -1 - error.
-*/
-int cpor_verify(char *filename, char *key_data, char *t_data, char *tag_data,
-				unsigned int lambda, unsigned int block_size)
+CPOR_params *cpor_new_params()
 {
 	CPOR_params *myparams = (CPOR_params *)malloc(sizeof(CPOR_params));
 	CPOR_challenge *challenge = NULL;
 	CPOR_proof *proof = NULL;
 	int ret = 0;
 
-	myparams->lambda = lambda;						/* The security parameter lambda */
+	myparams->lambda = 80;						/* The security parameter lambda */
 
 	myparams->prf_key_size = 20;				/* Size (in bytes) of an HMAC-SHA1 */
 	myparams->enc_key_size = 32;				/* Size (in bytes) of the user's AES encryption key */
 	myparams->mac_key_size = 20;				/* Size (in bytes) of the user's MAC key */
 
-	myparams->block_size = block_size;				/* Message block size in bytes */				
+	myparams->block_size = 4096;				/* Message block size in bytes */				
 	myparams->num_threads = 4;
 	myparams->num_challenge = myparams->lambda;
-
-	myparams->filename = filename;
-	myparams->key_data = key_data;
-	myparams->t_data = t_data;
-	myparams->tag_data = tag_data;
 
 	/* The size (in bits) of the prime that creates the field Z_p */
     myparams->Zp_bits = myparams->lambda;
@@ -158,6 +176,64 @@ int cpor_verify(char *filename, char *key_data, char *t_data, char *tag_data,
 	myparams->sector_size = ((myparams->Zp_bits / 8) - 1);
 	/* Number of sectors per block */
 	myparams->num_sectors = ( (myparams->block_size / myparams->sector_size) + ((myparams->block_size % myparams->sector_size) ? 1 : 0) );
+
+	myparams->key_data = NULL;
+	myparams->t_data = NULL;
+	myparams->tag_data = NULL;
+
+	return myparams;
+}
+
+int cpor_tag(char *filename, char *key_filename, char *t_filename, char *tag_filename)
+{
+	CPOR_params *myparams = cpor_new_params();
+	myparams->filename = filename;
+
+	#ifdef DEBUG_MODE
+		fprintf(stdout, "Using the following settings:\n");
+		fprintf(stdout, "\tLambda: %u\n", myparams->lambda);
+		fprintf(stdout, "\tPRF Key Size: %u bytes\n", myparams->prf_key_size);
+		fprintf(stdout, "\tENC Key Size: %u bytes\n", myparams->enc_key_size);
+		fprintf(stdout, "\tMAC Key Size: %u bytes\n", myparams->mac_key_size);
+	#endif
+		fprintf(stdout, "Generating keys...");
+		if(!cpor_create_new_keys(myparams, key_filename)) printf("Couldn't create keys\n");
+		else printf("Done\n");
+
+	#ifdef DEBUG_MODE
+		fprintf(stdout, "Using the following settings:\n");
+		fprintf(stdout, "\tBlock Size: %u bytes\n", myparams->block_size);
+		fprintf(stdout, "\tNumber of Threads: %u \n", myparams->num_threads);
+	#endif
+		fprintf(stdout, "Tagging %s...", myparams->filename); fflush(stdout);
+	#ifdef DEBUG_MODE
+		struct timeval tv1, tv2;
+		gettimeofday(&tv1, NULL);
+	#endif
+		if(!cpor_tag_file(myparams, key_filename, t_filename, tag_filename)) printf("No tag\n");
+		else printf("Done\n");
+	#ifdef DEBUG_MODE
+		gettimeofday(&tv2, NULL);
+		printf("%lf\n", (double)( (double)(double)(((double)tv2.tv_sec) + (double)((double)tv2.tv_usec/1000000)) - (double)((double)((double)tv1.tv_sec) + (double)((double)tv1.tv_usec/1000000)) ) );
+	#endif
+
+	free(myparams); myparams = NULL;
+}
+
+/*
+ret: 0 - Cheating, 1 - Verified, -1 - error.
+*/
+int cpor_verify(char *filename, char *key_data, char *t_data, char *tag_data)
+{
+	CPOR_params *myparams = cpor_new_params();
+	CPOR_challenge *challenge = NULL;
+	CPOR_proof *proof = NULL;
+	int ret = 0;
+
+	myparams->filename = filename;
+	myparams->key_data = key_data;
+	myparams->t_data = t_data;
+	myparams->tag_data = tag_data;
 
 	printf("Challenging file %s...\n", myparams->filename);
 	printf("\tCreating challenge for %s...", myparams->filename);
@@ -183,29 +259,97 @@ int cpor_verify(char *filename, char *key_data, char *t_data, char *tag_data,
     if(challenge) destroy_cpor_challenge(challenge);
 	if(proof) destroy_cpor_proof(myparams, proof);
 
-	free(myparams);
+	free(myparams); myparams = NULL;
 
 	return ret;
 }
-#ifdef _WIN32
-char *EncodingConvert(const char* strIn, int sourceCodepage, int targetCodepage)
-{
-	int unicodeLen = MultiByteToWideChar(sourceCodepage, 0, strIn, -1, NULL, 0);
-	wchar_t* pUnicode;
-	pUnicode = (wchar_t *)malloc((unicodeLen + 1) * sizeof(wchar_t));
-	memset(pUnicode, 0, (unicodeLen + 1) * sizeof(wchar_t));
-	MultiByteToWideChar(sourceCodepage, 0, strIn, -1, (LPWSTR)pUnicode, unicodeLen);
-	char * pTargetData = NULL;
-	int targetLen = WideCharToMultiByte(targetCodepage, 0, (LPWSTR)pUnicode, -1, pTargetData, 0, NULL, NULL);
-	pTargetData = (BYTE *)malloc((targetLen + 1) * sizeof(BYTE));
-	memset(pTargetData, 0, targetLen + 1);
-	WideCharToMultiByte(targetCodepage, 0, (LPWSTR)pUnicode, -1, pTargetData, targetLen, NULL, NULL);
-	free(pUnicode);
-	return pTargetData;
-}
-#endif
 
-void main()
+// typedef enum {
+//     CHALLENGE_DATA_KEY = 0,
+//     CHALLENGE_DATA_T = 1,
+//     CHALLENGE_DATA_TAG = 2
+// } challenge_data_type;
+
+void send_file(char *filename, char *url)
+{
+	CURL *curl;
+    CURLcode res;
+    FILE *file;
+    struct stat file_info;
+
+    /* get the file size of the local file */
+    stat(filename, &file_info);
+
+    /* could also be made with fdopen() from the previous descriptor */
+    file = fopen(filename, "rb");
+
+    /* get a curl handle */
+    curl = curl_easy_init();
+    if(curl) {
+        /* we want to use our own read function */
+        curl_easy_setopt(curl, CURLOPT_READFUNCTION, read_callback);
+
+        /* enable uploading */
+        curl_easy_setopt(curl, CURLOPT_UPLOAD, 1L);
+
+        /* HTTP PUT */
+        curl_easy_setopt(curl, CURLOPT_PUT, 1L);
+
+        /* specify target URL */
+        curl_easy_setopt(curl, CURLOPT_URL, url);
+
+        /* now specify which file to upload */
+        curl_easy_setopt(curl, CURLOPT_READDATA, file);
+
+        /* provide the size of the upload, we specicially typecast the value
+           to curl_off_t since we must be sure to use the correct data size */
+        curl_easy_setopt(curl, CURLOPT_INFILESIZE_LARGE,
+                         (curl_off_t)file_info.st_size);
+
+        /* Now run off and do what you've been told! */
+        res = curl_easy_perform(curl);
+        /* Check for errors */
+        if(res != CURLE_OK)
+            fprintf(stderr, "curl_easy_perform() failed: %s\n",
+                    curl_easy_strerror(res));
+
+        /* always cleanup */
+        curl_easy_cleanup(curl);
+    }
+    fclose(file); /* close the local file */
+}
+
+void cpor_send(char *key_filename, char *t_filename, char *tag_filename)
+{
+	char *http_server = "http://192.168.50.206:9999";
+	char *key_path = str_concat_many(2, http_server, "/challenge/key");
+	char *t_path = str_concat_many(2, http_server, "/challenge/t");
+	char *tag_path = str_concat_many(2, http_server, "/challenge/tag");
+    send_file(key_filename, key_path);
+	send_file(t_filename, t_path);
+	send_file(tag_filename, tag_path);
+}
+
+void tag_test()
+{
+	#if defined __APPLE__
+		char *filename = "/Users/dingyi/Downloads/10m.data";
+	#elif defined __linux__
+		char *filename = "/media/psf/Home/Downloads/10m.data";
+	#elif defined _WIN32
+		char *filename = EncodingConvert("Y:/Downloads/10m.data", CP_UTF8, CP_ACP);
+	#endif 
+
+	char *key_filename = create_tmp_name(".key");
+	char *t_filename = create_tmp_name(".t");
+	char *tag_filename = create_tmp_name(".tag");
+
+	cpor_tag(filename, key_filename, t_filename, tag_filename);
+
+	cpor_send(key_filename, t_filename, tag_filename);
+}
+
+void verify_test()
 {
 	char *key_filename = create_tmp_name(".key");
 	char *t_filename = create_tmp_name(".t");
@@ -241,7 +385,7 @@ void main()
 	char *filename = EncodingConvert("Y:/10兆.data", CP_UTF8, CP_ACP);
 #endif 
 
-	int success = cpor_verify(filename, key_data, t_data, tag_data, 80, 4096);
+	int success = cpor_verify(filename, key_data, t_data, tag_data);
 	if(success == 1) {
 		printf("Verified!\n");
 	} else if(success == 0) {
@@ -256,4 +400,14 @@ void main()
 	free(key_data);
 	free(t_data);
 	free(tag_data);
+}
+
+void main()
+{
+    curl_global_init(CURL_GLOBAL_ALL);
+
+	tag_test();
+	//verify_test();
+
+    curl_global_cleanup();
 }

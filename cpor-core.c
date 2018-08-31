@@ -30,7 +30,7 @@
 #include "cpor.h"
 #include "headers.h"
 
-CPOR_params params;
+//CPOR_params params;
 
 CPOR_global *cpor_create_global(unsigned int bits){
 	CPOR_global *global = NULL;

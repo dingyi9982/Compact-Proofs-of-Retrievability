@@ -58,16 +58,17 @@ void destroy_cpor_key(CPOR_params *myparams, CPOR_key *key){
 	sfree(key, sizeof(CPOR_key));
 }
 
-//Read keys from disk
-CPOR_key *cpor_get_keys(CPOR_params *myparams){
+//Read keys from CPOR_params
+CPOR_key *cpor_get_keys_from_params(CPOR_params *myparams){
 	CPOR_key *key = NULL;
+	FILE *keyfile = NULL;
 	size_t Zp_size = 0;
 	unsigned char *Zp = NULL;
 	unsigned long data_index = 0;
 
 	if( ((key = allocate_cpor_key(myparams)) == NULL)) goto cleanup;
 	if( ((key->global = allocate_cpor_global()) == NULL)) goto cleanup;
-	
+
 	memcpy(&key->k_enc_size, myparams->key_data + data_index, sizeof(size_t));
 	data_index += sizeof(size_t);
 	
@@ -92,6 +93,76 @@ CPOR_key *cpor_get_keys(CPOR_params *myparams){
 	if(!BN_bin2bn(Zp, Zp_size, key->global->Zp)) goto cleanup;
 	
 	if(Zp) sfree(Zp, Zp_size);
+	
+	return key;
+	
+cleanup:
+	if(Zp) sfree(Zp, Zp_size);
+	if(key) destroy_cpor_key(myparams, key);
+	return NULL;
+}
+
+//Read keys from keyfile
+CPOR_key *cpor_get_keys_from_file(CPOR_params *myparams, char *key_filename){
+	CPOR_key *key = NULL;
+	FILE *keyfile = NULL;
+	size_t Zp_size = 0;
+	unsigned char *Zp = NULL;
+	// unsigned long data_index = 0;
+
+	if( ((key = allocate_cpor_key(myparams)) == NULL)) goto cleanup;
+	if( ((key->global = allocate_cpor_global()) == NULL)) goto cleanup;
+
+	keyfile = fopen(key_filename, "r");
+	if(!keyfile){
+		fprintf(stderr, "ERROR: Was not able to create keyfile.\n");
+		goto cleanup;
+	}
+	
+	fread(&key->k_enc_size, sizeof(size_t), 1, keyfile);
+	if(ferror(keyfile)) goto cleanup;
+	fread(key->k_enc, key->k_enc_size, 1, keyfile);
+	if(ferror(keyfile)) goto cleanup;
+	fread(&key->k_mac_size, sizeof(size_t), 1, keyfile);
+	if(ferror(keyfile)) goto cleanup;
+	fread(key->k_mac, key->k_mac_size, 1, keyfile);
+	if(ferror(keyfile)) goto cleanup;
+
+	fread(&Zp_size, sizeof(size_t), 1, keyfile);
+	if(ferror(keyfile)) goto cleanup;
+	if( ((Zp = malloc(Zp_size)) == NULL)) goto cleanup;
+	memset(Zp, 0, Zp_size);
+	fread(Zp, Zp_size, 1, keyfile);
+	if(ferror(keyfile)) goto cleanup;
+	if(!BN_bin2bn(Zp, Zp_size, key->global->Zp)) goto cleanup;
+	
+	if(Zp) sfree(Zp, Zp_size);
+	if(keyfile) fclose(keyfile);
+	
+	/*memcpy(&key->k_enc_size, myparams->key_data + data_index, sizeof(size_t));
+	data_index += sizeof(size_t);
+	
+	memcpy(key->k_enc, myparams->key_data + data_index, key->k_enc_size);
+	data_index += key->k_enc_size;
+
+	memcpy(&key->k_mac_size, myparams->key_data + data_index, sizeof(size_t));
+	data_index += sizeof(size_t);
+
+	memcpy(key->k_mac, myparams->key_data + data_index, key->k_mac_size);
+	data_index += key->k_mac_size;
+
+	memcpy(&Zp_size, myparams->key_data + data_index, sizeof(size_t));
+	data_index += sizeof(size_t);
+
+	if( ((Zp = malloc(Zp_size)) == NULL)) goto cleanup;
+	memset(Zp, 0, Zp_size);
+
+	memcpy(Zp, myparams->key_data + data_index, Zp_size);
+	data_index += Zp_size;
+
+	if(!BN_bin2bn(Zp, Zp_size, key->global->Zp)) goto cleanup;
+	
+	if(Zp) sfree(Zp, Zp_size);*/
 	
 	return key;
 	

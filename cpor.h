@@ -61,17 +61,14 @@ struct CPOR_parameters_struct{
 	
 	unsigned int num_threads;	/* Number of tagging threads */
 
-	unsigned int op;
-
-	char *server;
-
+	//char *server;
 	char *filename;
 	char *key_data;
 	char *t_data;
 	char *tag_data;
 };
 
-extern CPOR_params params;
+// extern CPOR_params params;
 
 /* Global settings */
 typedef struct CPOR_global_struct CPOR_global;
@@ -123,7 +120,7 @@ struct CPOR_proof_struct{
 };
 
 /* File-level CPOR functions from cpor-file.c */
-int cpor_tag_file(CPOR_params *myparams, char *filepath, size_t filepath_len, char *keyfilepath, char *tagfilepath, size_t tagfilepath_len, char *tfilepath, size_t tfilepath_len);
+int cpor_tag_file(CPOR_params *myparams, char *key_filename, char *t_filename, char *tag_filename);
 
 CPOR_challenge *cpor_challenge_file(CPOR_params *myparams);
 
@@ -150,7 +147,9 @@ CPOR_proof *cpor_create_proof_final(CPOR_proof *proof);
 int cpor_verify_proof(CPOR_params *myparams, CPOR_global *global, CPOR_proof *proof, CPOR_challenge *challenge, unsigned char *k_prf, BIGNUM **alpha);
 
 /* Key functions from cpor-keys.c */
-CPOR_key *cpor_get_keys(CPOR_params *myparams);
+// CPOR_key *cpor_get_keys(CPOR_params *myparams, char *key_filename);
+CPOR_key *cpor_get_keys_from_file(CPOR_params *myparams, char *key_filename);
+CPOR_key *cpor_get_keys_from_params(CPOR_params *myparams);
 
 void destroy_cpor_key(CPOR_params *myparams, CPOR_key *key);
 
@@ -187,7 +186,7 @@ CPOR_t *allocate_cpor_t(CPOR_params *myparams);
 void destroy_cpor_global(CPOR_global *global);
 CPOR_global *allocate_cpor_global();
 
-int cpor_verify(char *filename, char *key_data, char *t_data, char *tag_data,
-				   unsigned int lambda, unsigned int block_size);
+int cpor_tag(char *filename, char *key_filename, char *t_filename, char *tag_filename);
+int cpor_verify(char *filename, char *key_data, char *t_data, char *tag_data);
 
 #endif

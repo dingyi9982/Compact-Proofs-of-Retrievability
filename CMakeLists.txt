@@ -11,16 +11,19 @@ set(CMAKE_C_FLAGS "-g3 -pthread")
 
 ELSEIF(WIN32)
 
-set(CMAKE_C_FLAGS "-g3")
-include_directories(depends/win32/include)
+set(CMAKE_C_FLAGS "-DCURL_STATICLIB -Wall -std=c99 -g3")
 include_directories("C:/Program Files/Mingw-w64/opt/include")
-link_directories(depends/win32/lib)
+include_directories(depends/win32/include)
 link_directories("C:/Program Files/Mingw-w64/opt/lib")
+link_directories(depends/win32/lib)
 
 ENDIF()
 
 add_library(cpor cpor-genaro.c cpor-core.c cpor-file.c cpor-keys.c cpor-misc.c)
-target_link_libraries(cpor crypto curl)
+# target_link_libraries(cpor crypto curl gnutls nettle hogweed gmp crypt32.a ws2_32.lib)
+# target_link_libraries(cpor crypto curl gnutls nettle hogweed gmp crypt32.a ws2_32.lib)
+# target_link_libraries(cpor crypto curl gnutls nettle hogweed gmp Crypt32.lib ws2_32.lib)
 
 add_executable(cpor-genaro cpor-genaro.c cpor-core.c cpor-file.c cpor-keys.c cpor-misc.c)
-target_link_libraries(cpor-genaro crypto curl)
+target_link_libraries(cpor-genaro crypto curl gnutls nettle hogweed gmp crypt32.a ws2_32.lib)
+# target_link_libraries(cpor-genaro crypto curl gnutls nettle hogweed gmp Crypt32.lib ws2_32.lib)
