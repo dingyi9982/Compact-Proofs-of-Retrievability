@@ -5,9 +5,19 @@ IF(APPLE)
 
 set(CMAKE_C_FLAGS "-gdwarf-2 -g3")
 
+add_library(cpor cpor-genaro.c cpor-core.c cpor-file.c cpor-keys.c cpor-misc.c)
+
+add_executable(cpor-genaro cpor-genaro.c cpor-core.c cpor-file.c cpor-keys.c cpor-misc.c)
+target_link_libraries(cpor-genaro crypto curl)
+
 ELSEIF(UNIX)
 
 set(CMAKE_C_FLAGS "-g3 -pthread")
+
+add_library(cpor cpor-genaro.c cpor-core.c cpor-file.c cpor-keys.c cpor-misc.c)
+
+add_executable(cpor-genaro cpor-genaro.c cpor-core.c cpor-file.c cpor-keys.c cpor-misc.c)
+target_link_libraries(cpor-genaro crypto curl)
 
 ELSEIF(WIN32)
 
@@ -17,13 +27,10 @@ include_directories(depends/win32/include)
 link_directories("C:/Program Files/Mingw-w64/opt/lib")
 link_directories(depends/win32/lib)
 
-ENDIF()
-
 add_library(cpor cpor-genaro.c cpor-core.c cpor-file.c cpor-keys.c cpor-misc.c)
-# target_link_libraries(cpor crypto curl gnutls nettle hogweed gmp crypt32.a ws2_32.lib)
-# target_link_libraries(cpor crypto curl gnutls nettle hogweed gmp crypt32.a ws2_32.lib)
-# target_link_libraries(cpor crypto curl gnutls nettle hogweed gmp Crypt32.lib ws2_32.lib)
 
 add_executable(cpor-genaro cpor-genaro.c cpor-core.c cpor-file.c cpor-keys.c cpor-misc.c)
 target_link_libraries(cpor-genaro crypto curl gnutls nettle hogweed gmp crypt32.a ws2_32.lib)
 # target_link_libraries(cpor-genaro crypto curl gnutls nettle hogweed gmp Crypt32.lib ws2_32.lib)
+
+ENDIF()
