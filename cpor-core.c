@@ -154,7 +154,6 @@ CPOR_challenge *cpor_create_challenge(CPOR_params *myparams, CPOR_global *global
 		l = myparams->num_challenge;
 	else
 		l = n;
-	
 
 	/* Allocate memory */
 	if( ((challenge = allocate_cpor_challenge(l)) == NULL)) goto cleanup;

@@ -61,7 +61,6 @@ void destroy_cpor_key(CPOR_params *myparams, CPOR_key *key){
 //Read keys from CPOR_params
 CPOR_key *cpor_get_keys_from_params(CPOR_params *myparams){
 	CPOR_key *key = NULL;
-	FILE *keyfile = NULL;
 	size_t Zp_size = 0;
 	unsigned char *Zp = NULL;
 	unsigned long data_index = 0;
@@ -113,7 +112,7 @@ CPOR_key *cpor_get_keys_from_file(CPOR_params *myparams, char *key_filename){
 	if( ((key = allocate_cpor_key(myparams)) == NULL)) goto cleanup;
 	if( ((key->global = allocate_cpor_global()) == NULL)) goto cleanup;
 
-	keyfile = fopen(key_filename, "r");
+	keyfile = fopen(key_filename, "rb");
 	if(!keyfile){
 		fprintf(stderr, "ERROR: Was not able to create keyfile.\n");
 		goto cleanup;

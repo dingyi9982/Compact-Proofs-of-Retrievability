@@ -206,22 +206,37 @@ static CPOR_t *read_cpor_t(CPOR_params *myparams, CPOR_key *key){
 	memcpy(&tbytes_size, myparams->t_data + data_index, sizeof(size_t));
 	data_index += sizeof(size_t);
 
-	if( ((tbytes = malloc(tbytes_size)) == NULL)) goto cleanup;
+	if( ((tbytes = malloc(tbytes_size)) == NULL)) {
+		printf("malloc(tbytes_size) error!\n");
+		goto cleanup;
+	}
 	memcpy(tbytes, myparams->t_data + data_index, tbytes_size);
 	data_index += tbytes_size;
 
 	/* Parse t */
 	memcpy(&t0_size, tbytes, sizeof(size_t));
-	if( ((t0 = malloc(t0_size)) == NULL)) goto cleanup;
+	if( ((t0 = malloc(t0_size)) == NULL)) {
+		printf("malloc(t0_size) error!\n");
+		goto cleanup;
+	}
 	memcpy(t0, tbytes + sizeof(size_t), t0_size);
 	memcpy(&t0_mac_size, tbytes + sizeof(size_t) + t0_size, sizeof(size_t));
-	if( ((t0_mac = malloc(t0_mac_size)) == NULL)) goto cleanup;
+	if( ((t0_mac = malloc(t0_mac_size)) == NULL)) {
+		printf("malloc(t0_mac_size) error!\n");
+		goto cleanup;
+	}
 	memcpy(t0_mac, tbytes + sizeof(size_t) + t0_size + sizeof(size_t), t0_mac_size);
 	
 	/* Verify and decrypt t0 */
-	if( ((plaintext = malloc(t0_size)) == NULL)) goto cleanup;
+	if( ((plaintext = malloc(t0_size)) == NULL)) {
+		printf("malloc(t0_size) error!\n");
+		goto cleanup;
+	}
 	memset(plaintext, 0, t0_size);
-	if(!decrypt_and_verify_secrets(key, t0 + sizeof(unsigned int), t0_size - sizeof(unsigned int), plaintext, &plaintext_size, t0_mac, t0_mac_size)) goto cleanup;
+	if(!decrypt_and_verify_secrets(key, t0 + sizeof(unsigned int), t0_size - sizeof(unsigned int), plaintext, &plaintext_size, t0_mac, t0_mac_size)) {
+		printf("decrypt_and_verify_secrets error!\n");
+		goto cleanup;
+	}
 	
 	/* Populate the CPOR_t struct */
 	memcpy(&(t->n), t0, sizeof(unsigned int));
@@ -231,11 +246,17 @@ static CPOR_t *read_cpor_t(CPOR_params *myparams, CPOR_key *key){
 	for(i=0; i < myparams->num_sectors; i++){
 		memcpy(&alpha_size, ptp, sizeof(size_t));
 		ptp += sizeof(size_t);
-		if( ((alpha = malloc(alpha_size)) == NULL)) goto cleanup;
+		if( ((alpha = malloc(alpha_size)) == NULL)) {
+			printf("malloc(alpha_size) error!\n");
+			goto cleanup;
+		}
 		memset(alpha, 0, alpha_size);
 		memcpy(alpha, ptp, alpha_size);
 		ptp += alpha_size;
-		if(!BN_bin2bn(alpha, alpha_size, t->alpha[i])) goto cleanup;
+		if(!BN_bin2bn(alpha, alpha_size, t->alpha[i])) {
+			printf("BN_bin2bn(alpha, alpha_size, t->alpha[i]) error!\n");
+			goto cleanup;
+		}
 		sfree(alpha, alpha_size);
 	}	
 
@@ -447,9 +468,6 @@ int cpor_tag_file(CPOR_params *myparams, char *key_filename, char *t_filename, c
 	    goto cleanup;
 	}
 
-#ifndef DEBUG_MODE
-exit:
-#endif
 	destroy_cpor_key(myparams, key);
 	destroy_cpor_t(myparams, t);
 	if(file) fclose(file);

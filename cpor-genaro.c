@@ -134,7 +134,7 @@ static char *EncodingConvert(const char* strIn, int sourceCodepage, int targetCo
 }
 #endif
 
-static size_t read_callback(void *ptr, size_t size, size_t nmemb, void *stream)
+static size_t read_file_callback(void *ptr, size_t size, size_t nmemb, void *stream)
 {
     size_t retcode;
     curl_off_t nread;
@@ -148,6 +148,28 @@ static size_t read_callback(void *ptr, size_t size, size_t nmemb, void *stream)
 
     fprintf(stderr, "*** We read %" CURL_FORMAT_CURL_OFF_T
     " bytes from file\n", nread);
+
+    return retcode;
+}
+
+static int params_remaining_size;
+static size_t read_params_callback(void *ptr, size_t size, size_t nmemb, void *data)
+{
+    size_t retcode = 0;
+
+	CPOR_params *params = (CPOR_params *)data;
+
+	// we have already finished off all the data
+    if (params_remaining_size == 0)
+        return retcode;
+
+	// set return code as the smaller of max allowed data and remaining data
+    retcode =  (size * nmemb >= params_remaining_size) ? params_size : size * nmemb;
+
+	// adjust left amount
+    params_remaining_size -= retcode;
+    memcpy(ptr, data, retcode);
+    params_remaining_size += retcode;
 
     return retcode;
 }
@@ -270,6 +292,46 @@ int cpor_verify(char *filename, char *key_data, char *t_data, char *tag_data)
 //     CHALLENGE_DATA_TAG = 2
 // } challenge_data_type;
 
+// curl_easy_setopt( curl, CURLOPT_WRITEDATA, (void *)&wr_error ); 
+// curl_easy_setopt( curl, CURLOPT_WRITEFUNCTION, write_data );
+
+void send_data(char *data, size_t len, char *url)
+{
+	CURL *curl;
+    CURLcode res;
+
+    /* get a curl handle */
+    curl = curl_easy_init();
+    if(curl) {
+        /* we want to use our own read function */
+        curl_easy_setopt(curl, CURLOPT_READFUNCTION, read_params_callback);
+
+        /* enable uploading */
+        curl_easy_setopt(curl, CURLOPT_UPLOAD, 1L);
+
+        /* HTTP PUT */
+        curl_easy_setopt(curl, CURLOPT_PUT, 1L);
+
+        /* specify target URL */
+        curl_easy_setopt(curl, CURLOPT_URL, url);
+
+        curl_easy_setopt(curl, CURLOPT_READDATA, data);
+
+		 /* and give the size of the upload (optional) */
+        curl_easy_setopt(curl, CURLOPT_INFILESIZE_LARGE, len);
+
+        /* Now run off and do what you've been told! */
+        res = curl_easy_perform(curl);
+        /* Check for errors */
+        if(res != CURLE_OK)
+            fprintf(stderr, "curl_easy_perform() failed: %s\n",
+                    curl_easy_strerror(res));
+
+        /* always cleanup */
+        curl_easy_cleanup(curl);
+    }
+}
+
 void send_file(char *filename, char *url)
 {
 	CURL *curl;
@@ -287,7 +349,7 @@ void send_file(char *filename, char *url)
     curl = curl_easy_init();
     if(curl) {
         /* we want to use our own read function */
-        curl_easy_setopt(curl, CURLOPT_READFUNCTION, read_callback);
+        curl_easy_setopt(curl, CURLOPT_READFUNCTION, read_file_callback);
 
         /* enable uploading */
         curl_easy_setopt(curl, CURLOPT_UPLOAD, 1L);
@@ -319,12 +381,18 @@ void send_file(char *filename, char *url)
     fclose(file); /* close the local file */
 }
 
-void cpor_send(char *key_filename, char *t_filename, char *tag_filename)
+void cpor_send(CPOR_params *params, char *key_filename, char *t_filename, char *tag_filename)
 {
-	char *http_server = "http://192.168.50.206:9999";
-	char *key_path = str_concat_many(2, http_server, "/challenge/key");
-	char *t_path = str_concat_many(2, http_server, "/challenge/t");
-	char *tag_path = str_concat_many(2, http_server, "/challenge/tag");
+	// char *http_server = "http://192.168.50.206:9999";
+	char *http_server = "http://localhost:9999";
+	char *params_path = str_concat_many(2, http_server, "/audit/cpor_params");
+	char *key_path = str_concat_many(2, http_server, "/audit/key");
+	char *t_path = str_concat_many(2, http_server, "/audit/t");
+	char *tag_path = str_concat_many(2, http_server, "/audit/tag");
+	
+	params_remaining_size = sizeof(CPOR_params);
+	send_data(params, sizeof(CPOR_params), params_path);
+
     send_file(key_filename, key_path);
 	send_file(t_filename, t_path);
 	send_file(tag_filename, tag_path);
@@ -346,7 +414,8 @@ void tag_test()
 
 	cpor_tag(filename, key_filename, t_filename, tag_filename);
 
-	cpor_send(key_filename, t_filename, tag_filename);
+	CPOR_params *params = cpor_new_params();
+	cpor_send(params, key_filename, t_filename, tag_filename);
 }
 
 void verify_test()
@@ -406,8 +475,10 @@ void main()
 {
     curl_global_init(CURL_GLOBAL_ALL);
 
+	params_remaining_size = sizeof(CPOR_params);
+
 	tag_test();
-	//verify_test();
+	verify_test();
 
     curl_global_cleanup();
 }
