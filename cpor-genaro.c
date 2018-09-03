@@ -32,6 +32,7 @@
 #include <getopt.h>
 #include <curl/curl.h>
 
+static int params_remaining_size;
 static inline char separator()
 {
 #ifdef _WIN32
@@ -152,7 +153,6 @@ static size_t read_file_callback(void *ptr, size_t size, size_t nmemb, void *str
     return retcode;
 }
 
-static int params_remaining_size;
 static size_t read_params_callback(void *ptr, size_t size, size_t nmemb, void *data)
 {
     size_t retcode = 0;
@@ -164,7 +164,7 @@ static size_t read_params_callback(void *ptr, size_t size, size_t nmemb, void *d
         return retcode;
 
 	// set return code as the smaller of max allowed data and remaining data
-    retcode =  (size * nmemb >= params_remaining_size) ? params_size : size * nmemb;
+    retcode =  (size * nmemb >= params_remaining_size) ? params_remaining_size : size * nmemb;
 
 	// adjust left amount
     params_remaining_size -= retcode;
@@ -386,14 +386,14 @@ void cpor_send(CPOR_params *params, char *key_filename, char *t_filename, char *
 	// char *http_server = "http://192.168.50.206:9999";
 	char *http_server = "http://localhost:9999";
 	char *params_path = str_concat_many(2, http_server, "/audit/cpor_params");
-	char *key_path = str_concat_many(2, http_server, "/audit/key");
-	char *t_path = str_concat_many(2, http_server, "/audit/t");
-	char *tag_path = str_concat_many(2, http_server, "/audit/tag");
+	char *key_path = str_concat_many(2, http_server, "/audit/cpor_key");
+	char *t_path = str_concat_many(2, http_server, "/audit/cpor_t");
+	char *tag_path = str_concat_many(2, http_server, "/audit/cpor_tag");
 	
 	params_remaining_size = sizeof(CPOR_params);
-	send_data(params, sizeof(CPOR_params), params_path);
+	send_data(params, params_remaining_size, params_path);
 
-    send_file(key_filename, key_path);
+	send_file(key_filename, key_path);
 	send_file(t_filename, t_path);
 	send_file(tag_filename, tag_path);
 }
@@ -474,8 +474,6 @@ void verify_test()
 void main()
 {
     curl_global_init(CURL_GLOBAL_ALL);
-
-	params_remaining_size = sizeof(CPOR_params);
 
 	tag_test();
 	verify_test();

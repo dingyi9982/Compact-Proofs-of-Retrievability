@@ -61,7 +61,6 @@ struct CPOR_parameters_struct{
 	
 	unsigned int num_threads;	/* Number of tagging threads */
 
-	//char *server;
 	char *filename;
 	char *key_data;
 	char *t_data;

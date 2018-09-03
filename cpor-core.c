@@ -297,7 +297,6 @@ int cpor_verify_proof(CPOR_params *myparams, CPOR_global *global, CPOR_proof *pr
 	if(BN_ucmp(sigma, proof->sigma) == 0) ret = 1;
 	else ret = 0;
 	
-
 	if(product) BN_clear_free(product);
 	if(sigma) BN_clear_free(sigma);
 	if(ctx) BN_CTX_free(ctx);
