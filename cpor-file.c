@@ -105,7 +105,7 @@ cleanup:
 	return NULL;
 }
 
-static int write_cpor_t(CPOR_params *myparams, FILE *tfile, CPOR_key *key, CPOR_t *t){
+static int write_cpor_t(CPOR_params *params, FILE *tfile, CPOR_key *key, CPOR_t *t){
 	unsigned char *enc_input = NULL;
 	unsigned char *tbytes = NULL;
 	unsigned char *t0 = NULL;
@@ -121,11 +121,11 @@ static int write_cpor_t(CPOR_params *myparams, FILE *tfile, CPOR_key *key, CPOR_
 	if(!tfile || !key || !t) return 0;
 
 	/* Prepare to encrypt k_prf and alphas */ 
-	enc_input_size = myparams->prf_key_size;
+	enc_input_size = params->prf_key_size;
 	if( ((enc_input = malloc(enc_input_size)) == NULL)) goto cleanup;
-	memcpy(enc_input, t->k_prf, myparams->prf_key_size);
+	memcpy(enc_input, t->k_prf, params->prf_key_size);
 
-	for(i=0; i < myparams->num_sectors; i++){
+	for(i=0; i < params->num_sectors; i++){
 		alpha_size = BN_num_bytes(t->alpha[i]);
 		if( ((alpha = malloc(alpha_size)) == NULL)) goto cleanup;
 		memset(alpha, 0, alpha_size);
@@ -183,7 +183,7 @@ cleanup:
 	return 0;
 }
 
-static CPOR_t *read_cpor_t(CPOR_params *myparams, CPOR_key *key){
+static CPOR_t *read_cpor_t(CPOR_params *params, CPOR_key *key, char *t_data){
 	CPOR_t *t = NULL;
 	unsigned char *tbytes = NULL;
 	unsigned char *t0 = NULL;
@@ -199,18 +199,18 @@ static CPOR_t *read_cpor_t(CPOR_params *myparams, CPOR_key *key){
 	int i = 0;
 	unsigned long data_index = 0;
 	
-	if(!myparams->t_data) return 0;
+	if(!t_data) return 0;
 	
-	if( ((t = allocate_cpor_t(myparams)) == NULL)) goto cleanup;
+	if( ((t = allocate_cpor_t(params)) == NULL)) goto cleanup;
 	
-	memcpy(&tbytes_size, myparams->t_data + data_index, sizeof(size_t));
+	memcpy(&tbytes_size, t_data + data_index, sizeof(size_t));
 	data_index += sizeof(size_t);
 
 	if( ((tbytes = malloc(tbytes_size)) == NULL)) {
 		printf("malloc(tbytes_size) error!\n");
 		goto cleanup;
 	}
-	memcpy(tbytes, myparams->t_data + data_index, tbytes_size);
+	memcpy(tbytes, t_data + data_index, tbytes_size);
 	data_index += tbytes_size;
 
 	/* Parse t */
@@ -241,9 +241,9 @@ static CPOR_t *read_cpor_t(CPOR_params *myparams, CPOR_key *key){
 	/* Populate the CPOR_t struct */
 	memcpy(&(t->n), t0, sizeof(unsigned int));
 	ptp = plaintext;
-	memcpy(t->k_prf, plaintext, myparams->prf_key_size);
-	ptp += myparams->prf_key_size;
-	for(i=0; i < myparams->num_sectors; i++){
+	memcpy(t->k_prf, plaintext, params->prf_key_size);
+	ptp += params->prf_key_size;
+	for(i=0; i < params->num_sectors; i++){
 		memcpy(&alpha_size, ptp, sizeof(size_t));
 		ptp += sizeof(size_t);
 		if( ((alpha = malloc(alpha_size)) == NULL)) {
@@ -273,7 +273,7 @@ cleanup:
 	if(tbytes) sfree(tbytes, tbytes_size);
 	if(t0) sfree(t0, t0_size);
 	if(t0_mac) sfree(t0_mac, t0_mac_size);
-	if(t) destroy_cpor_t(myparams, t);
+	if(t) destroy_cpor_t(params, t);
 
 	return NULL;
 }
@@ -281,7 +281,7 @@ cleanup:
 #ifdef THREADING
 
 struct thread_arguments{
-	CPOR_params *myparams;
+	CPOR_params *params;
 	FILE *file;		/* File to tag; a unique file descriptor to this thread */
 	CPOR_key *key;	/* CPOR keys */
 	CPOR_t *t;		/* Per-file secretes */
@@ -295,8 +295,8 @@ void *cpor_tag_thread(void *threadargs_ptr){
 	int block;
 	int *ret = NULL;
 	struct thread_arguments *threadargs = threadargs_ptr;
-	CPOR_params *myparams = threadargs->myparams;
-	unsigned char buf[myparams->block_size];
+	CPOR_params *params = threadargs->params;
+	unsigned char buf[params->block_size];
 	int i = 0;
 	
 	if(!threadargs || !threadargs->file || !threadargs->tags || !threadargs->key || !threadargs->numblocks) goto cleanup;
@@ -309,16 +309,16 @@ void *cpor_tag_thread(void *threadargs_ptr){
 	/* For N threads, read in and tag each Nth block */
 	block = threadargs->threadid;
 	for(i = 0; i < threadargs->numblocks; i++){
-		memset(buf, 0, myparams->block_size);
-		fseek(threadargs->file, block * myparams->block_size, SEEK_SET);
-		fread(buf, myparams->block_size, 1, threadargs->file);
+		memset(buf, 0, params->block_size);
+		fseek(threadargs->file, block * params->block_size, SEEK_SET);
+		fread(buf, params->block_size, 1, threadargs->file);
 		if(ferror(threadargs->file))goto cleanup;
-		//tag = cpor_tag_block(threadargs->key, buf, myparams->block_size, block);
-		tag = cpor_tag_block(myparams, threadargs->key->global, threadargs->t->k_prf, threadargs->t->alpha, buf, block);
+		//tag = cpor_tag_block(threadargs->key, buf, params->block_size, block);
+		tag = cpor_tag_block(params, threadargs->key->global, threadargs->t->k_prf, threadargs->t->alpha, buf, block);
 		if(!tag) goto cleanup;
 		/* Store the tag in a buffer until all threads are done. Writer should destroy tags. */
 		threadargs->tags[block] = tag;
-		block += myparams->num_threads;
+		block += params->num_threads;
 	}
 
 	*ret = 1;
@@ -332,7 +332,7 @@ cleanup:
 
 /* cpor_tag_file:
 */
-int cpor_tag_file(CPOR_params *myparams, char *key_filename, char *t_filename, char *tag_filename){
+int cpor_tag_file(CPOR_params *params, char *filename, char *key_filename, char *t_filename, char *tag_filename){
 	CPOR_key *key = NULL;
 
 	CPOR_t *t = NULL;
@@ -346,21 +346,21 @@ int cpor_tag_file(CPOR_params *myparams, char *key_filename, char *t_filename, c
 #endif
 	struct stat st;
 #ifdef THREADING
-	pthread_t threads[myparams->num_threads];
+	pthread_t threads[params->num_threads];
 	int *thread_return = NULL;
-	struct thread_arguments threadargs[myparams->num_threads];
+	struct thread_arguments threadargs[params->num_threads];
 
 	CPOR_tag **tags = NULL;
 
-	memset(threads, 0, sizeof(pthread_t) * myparams->num_threads);
+	memset(threads, 0, sizeof(pthread_t) * params->num_threads);
 	memset(&st, 0, sizeof(struct stat));
 #else
-	unsigned char buf[myparams->block_size];
+	unsigned char buf[params->block_size];
 	CPOR_tag *tag = NULL;
 #endif
 
-	if(!myparams->filename) return 0;
-	if(strlen(myparams->filename) >= MAXPATHLEN) return 0;
+	if(!filename) return 0;
+	if(strlen(filename) >= MAXPATHLEN) return 0;
 	if(strlen(t_filename) >= MAXPATHLEN) return 0;
 	if(strlen(tag_filename) >= MAXPATHLEN) return 0;
 	
@@ -376,16 +376,16 @@ int cpor_tag_file(CPOR_params *myparams, char *key_filename, char *t_filename, c
 	}
 
 	/* Get the CPOR keys */
-	key = cpor_get_keys_from_file(myparams, key_filename);
+	key = cpor_get_keys_from_file(params, key_filename);
 	if(!key) goto cleanup;
 
 	/* Calculate the number cpor blocks in the file */
-	if(stat(myparams->filename, &st) < 0) return 0;
-	numfileblocks = (st.st_size / myparams->block_size);
-	if(st.st_size % myparams->block_size) numfileblocks++;
+	if(stat(filename, &st) < 0) return 0;
+	numfileblocks = (st.st_size / params->block_size);
+	if(st.st_size % params->block_size) numfileblocks++;
 	
 	/* Generate the per-file secrets */
-	t = cpor_create_t(myparams, key->global, numfileblocks);
+	t = cpor_create_t(params, key->global, numfileblocks);
 	if(!t) goto cleanup;
 
 #ifdef THREADING
@@ -394,20 +394,20 @@ int cpor_tag_file(CPOR_params *myparams, char *key_filename, char *t_filename, c
 	if( ((tags = malloc( (sizeof(CPOR_tag *) * numfileblocks) )) == NULL)) goto cleanup;
 	memset(tags, 0, (sizeof(CPOR_tag *) * numfileblocks));
 
-	for(index = 0; index < myparams->num_threads; index++){
+	for(index = 0; index < params->num_threads; index++){
 		/* Open a unique file descriptor for each thread to avoid race conditions */
-		threadargs[index].myparams = myparams;
-		threadargs[index].file = fopen(myparams->filename, "rb");
+		threadargs[index].params = params;
+		threadargs[index].file = fopen(filename, "rb");
 		if(!threadargs[index].file) goto cleanup;
 		threadargs[index].key = key;
 		threadargs[index].t = t;
 		threadargs[index].threadid = index;
-		threadargs[index].numblocks = (numfileblocks / myparams->num_threads);
+		threadargs[index].numblocks = (numfileblocks / params->num_threads);
 		threadargs[index].tags = tags;
 		
 		/* If there is not an equal number of blocks to tag, add the extra blocks to
 		 * the corresponding threads */
-		if(index < (numfileblocks % myparams->num_threads))
+		if(index < (numfileblocks % params->num_threads))
 			threadargs[index].numblocks++;
 		/* If the thread has blocks to tag, spawn it */
 		if(threadargs[index].numblocks > 0)
@@ -416,7 +416,7 @@ int cpor_tag_file(CPOR_params *myparams, char *key_filename, char *t_filename, c
             }
 	}
 	/* Check to see all tags were generated */
-	for(index = 0; index < myparams->num_threads; index++){
+	for(index = 0; index < params->num_threads; index++){
 		if(threads[index]){
 			if(pthread_join(threads[index], (void **)&thread_return) != 0) {
 			    goto cleanup;
@@ -445,17 +445,17 @@ int cpor_tag_file(CPOR_params *myparams, char *key_filename, char *t_filename, c
 
 #else
 	/* Open the file for reading */
-	file = fopen(myparams->filename, "rb");
+	file = fopen(filename, "rb");
 	if(!file){
 		fprintf(stderr, "ERROR: Was not able to open %s for reading.\n", filepath);
 		goto cleanup;
 	}
 
 	do{
-		memset(buf, 0, myparams->block_size);
-		fread(buf, myparams->block_size, 1, file);
+		memset(buf, 0, params->block_size);
+		fread(buf, params->block_size, 1, file);
 		if(ferror(file)) goto cleanup;
-		tag = cpor_tag_block(key->global, t->k_prf, t->alpha, buf, myparams->block_size, index);
+		tag = cpor_tag_block(key->global, t->k_prf, t->alpha, buf, params->block_size, index);
 		if(!tag) goto cleanup;
 		if(!write_cpor_tag(tagfile, tag)) goto cleanup;
 		index++;
@@ -464,12 +464,12 @@ int cpor_tag_file(CPOR_params *myparams, char *key_filename, char *t_filename, c
 #endif
 
 	/* Write t to the tfile */
-	if(!write_cpor_t(myparams, tfile, key, t)) {
+	if(!write_cpor_t(params, tfile, key, t)) {
 	    goto cleanup;
 	}
 
-	destroy_cpor_key(myparams, key);
-	destroy_cpor_t(myparams, t);
+	destroy_cpor_key(params, key);
+	destroy_cpor_t(params, t);
 	if(file) fclose(file);
 	if(tfile) fclose(tfile);
 	if(tagfile) fclose(tagfile);
@@ -478,8 +478,8 @@ int cpor_tag_file(CPOR_params *myparams, char *key_filename, char *t_filename, c
 cleanup:
 
 	fprintf(stderr, "ERROR: Was unable to create tag file.\n");
-	if(key) destroy_cpor_key(myparams, key);	
-	if(t) destroy_cpor_t(myparams, t);
+	if(key) destroy_cpor_key(params, key);	
+	if(t) destroy_cpor_t(params, t);
 	if(file) fclose(file);
 	if(tagfile){ 
 		ftruncate(fileno(tagfile), 0);
@@ -490,73 +490,95 @@ cleanup:
 		ftruncate(fileno(tfile), 0);
 		unlink(t_filename);
 		fclose(tfile);
-	}	
+	}
 	return 0;
 }
 
-CPOR_challenge *cpor_challenge_file(CPOR_params *myparams){
+CPOR_challenge *cpor_challenge(CPOR_params *params, char *key_data, char *t_data){
 	CPOR_key *key = NULL;
 	CPOR_challenge *challenge = NULL;
 	CPOR_t *t = NULL;
 	
 	/* Get the CPOR keys */
-	key = cpor_get_keys_from_params(myparams);
+	key = cpor_get_keys_from_data(params, key_data);
 	if(!key) goto cleanup;
-	
+    
+//    printf("key:");
+//    for(int i = 0; i < sizeof(CPOR_key); i++)
+//        printf(" %d", ((char *)key)[i]);
+//    printf("\n");
+    
 	/* Get t for n (the number of blocks) */
-	t = read_cpor_t(myparams, key);
+	t = read_cpor_t(params, key, t_data);
 	if(!t){ fprintf(stderr, "Could not get t.\n"); goto cleanup; }
 
-	challenge = cpor_create_challenge(myparams, key->global, t->n);
+	challenge = cpor_create_challenge(params, key->global, t->n);
 	if(!challenge) goto cleanup;
 
-	if(key) destroy_cpor_key(myparams, key);
-	if(t) destroy_cpor_t(myparams, t);
+	if(key) destroy_cpor_key(params, key);
+	if(t) destroy_cpor_t(params, t);
 	
 	return challenge;
 
 cleanup:
-	if(key) destroy_cpor_key(myparams, key);
-	if(t) destroy_cpor_t(myparams, t);
+	if(key) destroy_cpor_key(params, key);
+	if(t) destroy_cpor_t(params, t);
 	return NULL;
 }
 
-CPOR_proof *cpor_prove_file(CPOR_params *myparams, CPOR_challenge *challenge){
+CPOR_tag **cpor_get_tags(CPOR_challenge *challenge, char *tag_data)
+{
+	CPOR_tag **tags = (CPOR_tag **)malloc(challenge->l * sizeof(CPOR_tag *));
+
+	int i = 0;
+	for(; i < challenge->l; i++){
+		tags[i] = read_cpor_tag(tag_data, challenge->I[i]);
+		if(!tags[i]) goto cleanup;
+	}
+
+	return tags;
+
+cleanup:
+	for(int j = 0; j < i; j++) {
+		destroy_cpor_tag(tags[i]);
+	}
+	free(tags); tags = NULL;
+	return NULL;
+}
+
+CPOR_proof *cpor_prove_file(CPOR_params *params, char *filename, CPOR_challenge *challenge, CPOR_tag **tags){
 	CPOR_tag *tag = NULL;
 	CPOR_proof *proof = NULL;
 	FILE *file = NULL;
-	unsigned char block[myparams->block_size];
+	unsigned char block[params->block_size];
 	int i = 0;
 	
-	if(!myparams->filename || !challenge) return 0;
-	if(strlen(myparams->filename) >= MAXPATHLEN) return 0;
+	if(!filename || !challenge) return 0;
+	if(strlen(filename) >= MAXPATHLEN) return 0;
 	
-	memset(block, 0, myparams->block_size);
+	memset(block, 0, params->block_size);
 
-	file = fopen(myparams->filename, "rb");
+	file = fopen(filename, "rb");
 	if(!file){
-		fprintf(stderr, "ERROR: Was unable to open %s\n", myparams->filename);
+		fprintf(stderr, "ERROR: Was unable to open %s\n", filename);
 		return NULL;
 	}
 	
 	for(i = 0; i < challenge->l; i++){
-		memset(block, 0, myparams->block_size);
+		memset(block, 0, params->block_size);
 	
 		/* Seek to data block at I[i] */
-		if(fseek(file, (myparams->block_size * (challenge->I[i])), SEEK_SET) < 0) goto cleanup;
+		if(fseek(file, (params->block_size * (challenge->I[i])), SEEK_SET) < 0) goto cleanup;
 
 		/* Read data block */
-		fread(block, myparams->block_size, 1, file);
+		fread(block, params->block_size, 1, file);
 		if(ferror(file)) goto cleanup;
 		
 		/* Read tag for data block at I[i] */
-		tag = read_cpor_tag(myparams->tag_data, challenge->I[i]);
-		if(!tag) goto cleanup;
+		tag = tags[i];
 		
-		proof = cpor_create_proof_update(myparams, challenge, proof, tag, block, challenge->I[i], i);
+		proof = cpor_create_proof_update(params, challenge, proof, tag, block, challenge->I[i], i);
 		if(!proof) goto cleanup;
-		
-		destroy_cpor_tag(tag);
 	}
 	
 	proof = cpor_create_proof_final(proof);
@@ -572,26 +594,26 @@ cleanup:
 	return NULL;
 }
 
-int cpor_verify_file(CPOR_params *myparams, CPOR_challenge *challenge, CPOR_proof *proof){
+int cpor_verify_file(CPOR_params *params, char *filename, char *key_data, char *t_data, CPOR_challenge *challenge, CPOR_proof *proof){
 	CPOR_key *key = NULL;
 	CPOR_t *t = NULL;
 	int ret = -1;
 	
-	if(!myparams->filename || !challenge || !proof) return -1;
+	if(!filename || !challenge || !proof) return -1;
 	
 	/* Get the CPOR keys */
-	key = cpor_get_keys_from_params(myparams);
+	key = cpor_get_keys_from_data(params, key_data);
 	if(!key) goto cleanup;
 	
 	/* Get t */
-	t = read_cpor_t(myparams, key);
+	t = read_cpor_t(params, key, t_data);
 	if(!t) goto cleanup;
 	
-	ret = cpor_verify_proof(myparams, challenge->global, proof, challenge, t->k_prf, t->alpha);
+	ret = cpor_verify_proof(params, challenge->global, proof, challenge, t->k_prf, t->alpha);
 
 cleanup:
-	if(key) destroy_cpor_key(myparams, key);
-	if(t) destroy_cpor_t(myparams, t);
+	if(key) destroy_cpor_key(params, key);
+	if(t) destroy_cpor_t(params, t);
 	
 	return ret;
 }

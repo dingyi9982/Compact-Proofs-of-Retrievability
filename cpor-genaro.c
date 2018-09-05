@@ -33,6 +33,7 @@
 #include <curl/curl.h>
 
 static int params_remaining_size;
+static int filename_remaining_size;
 static inline char separator()
 {
 #ifdef _WIN32
@@ -157,8 +158,6 @@ static size_t read_params_callback(void *ptr, size_t size, size_t nmemb, void *d
 {
     size_t retcode = 0;
 
-	CPOR_params *params = (CPOR_params *)data;
-
 	// we have already finished off all the data
     if (params_remaining_size == 0)
         return retcode;
@@ -174,72 +173,97 @@ static size_t read_params_callback(void *ptr, size_t size, size_t nmemb, void *d
     return retcode;
 }
 
+static size_t read_filename_callback(void *ptr, size_t size, size_t nmemb, void *data)
+{
+    size_t retcode = 0;
+
+	// we have already finished off all the data
+    if (filename_remaining_size == 0)
+        return retcode;
+
+	// set return code as the smaller of max allowed data and remaining data
+    retcode =  (size * nmemb >= filename_remaining_size) ? filename_remaining_size : size * nmemb;
+
+	// adjust left amount
+    filename_remaining_size -= retcode;
+    memcpy(ptr, data, retcode);
+    filename_remaining_size += retcode;
+
+    return retcode;
+}
+
 CPOR_params *cpor_new_params()
 {
-	CPOR_params *myparams = (CPOR_params *)malloc(sizeof(CPOR_params));
+	CPOR_params *params = (CPOR_params *)malloc(sizeof(CPOR_params));
 	CPOR_challenge *challenge = NULL;
 	CPOR_proof *proof = NULL;
 	int ret = 0;
 
-	myparams->lambda = 80;						/* The security parameter lambda */
+	params->lambda = 80;						/* The security parameter lambda */
 
-	myparams->prf_key_size = 20;				/* Size (in bytes) of an HMAC-SHA1 */
-	myparams->enc_key_size = 32;				/* Size (in bytes) of the user's AES encryption key */
-	myparams->mac_key_size = 20;				/* Size (in bytes) of the user's MAC key */
+	params->prf_key_size = 20;				/* Size (in bytes) of an HMAC-SHA1 */
+	params->enc_key_size = 32;				/* Size (in bytes) of the user's AES encryption key */
+	params->mac_key_size = 20;				/* Size (in bytes) of the user's MAC key */
 
-	myparams->block_size = 4096;				/* Message block size in bytes */				
-	myparams->num_threads = 4;
-	myparams->num_challenge = myparams->lambda;
+	params->block_size = 4096;				/* Message block size in bytes */				
+	params->num_threads = 4;
+	params->num_challenge = params->lambda;
 
 	/* The size (in bits) of the prime that creates the field Z_p */
-    myparams->Zp_bits = myparams->lambda;
+    params->Zp_bits = params->lambda;
 	/* The message sector size 1 byte smaller than the size of Zp so that it 
 	 * is guaranteed to be an element of the group Zp */
-	myparams->sector_size = ((myparams->Zp_bits / 8) - 1);
+	params->sector_size = ((params->Zp_bits / 8) - 1);
 	/* Number of sectors per block */
-	myparams->num_sectors = ( (myparams->block_size / myparams->sector_size) + ((myparams->block_size % myparams->sector_size) ? 1 : 0) );
+	params->num_sectors = ( (params->block_size / params->sector_size) + ((params->block_size % params->sector_size) ? 1 : 0) );
 
-	myparams->key_data = NULL;
-	myparams->t_data = NULL;
-	myparams->tag_data = NULL;
-
-	return myparams;
+	return params;
 }
 
+/*
+ret: 0 - Success, -1 - error.
+*/
 int cpor_tag(char *filename, char *key_filename, char *t_filename, char *tag_filename)
 {
-	CPOR_params *myparams = cpor_new_params();
-	myparams->filename = filename;
+	CPOR_params *params = cpor_new_params();
 
 	#ifdef DEBUG_MODE
 		fprintf(stdout, "Using the following settings:\n");
-		fprintf(stdout, "\tLambda: %u\n", myparams->lambda);
-		fprintf(stdout, "\tPRF Key Size: %u bytes\n", myparams->prf_key_size);
-		fprintf(stdout, "\tENC Key Size: %u bytes\n", myparams->enc_key_size);
-		fprintf(stdout, "\tMAC Key Size: %u bytes\n", myparams->mac_key_size);
+		fprintf(stdout, "\tLambda: %u\n", params->lambda);
+		fprintf(stdout, "\tPRF Key Size: %u bytes\n", params->prf_key_size);
+		fprintf(stdout, "\tENC Key Size: %u bytes\n", params->enc_key_size);
+		fprintf(stdout, "\tMAC Key Size: %u bytes\n", params->mac_key_size);
 	#endif
 		fprintf(stdout, "Generating keys...");
-		if(!cpor_create_new_keys(myparams, key_filename)) printf("Couldn't create keys\n");
+		if(!cpor_create_new_keys(params, key_filename)) {
+			printf("Couldn't create keys\n");
+			return -1;
+		}
 		else printf("Done\n");
 
 	#ifdef DEBUG_MODE
 		fprintf(stdout, "Using the following settings:\n");
-		fprintf(stdout, "\tBlock Size: %u bytes\n", myparams->block_size);
-		fprintf(stdout, "\tNumber of Threads: %u \n", myparams->num_threads);
+		fprintf(stdout, "\tBlock Size: %u bytes\n", params->block_size);
+		fprintf(stdout, "\tNumber of Threads: %u \n", params->num_threads);
 	#endif
-		fprintf(stdout, "Tagging %s...", myparams->filename); fflush(stdout);
+		fprintf(stdout, "Tagging %s...", filename); fflush(stdout);
 	#ifdef DEBUG_MODE
 		struct timeval tv1, tv2;
 		gettimeofday(&tv1, NULL);
 	#endif
-		if(!cpor_tag_file(myparams, key_filename, t_filename, tag_filename)) printf("No tag\n");
+		if(!cpor_tag_file(params, filename, key_filename, t_filename, tag_filename)) {
+			printf("No tag\n");
+			return -1;
+		}
 		else printf("Done\n");
 	#ifdef DEBUG_MODE
 		gettimeofday(&tv2, NULL);
 		printf("%lf\n", (double)( (double)(double)(((double)tv2.tv_sec) + (double)((double)tv2.tv_usec/1000000)) - (double)((double)((double)tv1.tv_sec) + (double)((double)tv1.tv_usec/1000000)) ) );
 	#endif
 
-	free(myparams); myparams = NULL;
+	free(params); params = NULL;
+
+	return 0;
 }
 
 /*
@@ -247,27 +271,29 @@ ret: 0 - Cheating, 1 - Verified, -1 - error.
 */
 int cpor_verify(char *filename, char *key_data, char *t_data, char *tag_data)
 {
-	CPOR_params *myparams = cpor_new_params();
+	CPOR_params *params = cpor_new_params();
 	CPOR_challenge *challenge = NULL;
 	CPOR_proof *proof = NULL;
 	int ret = 0;
 
-	myparams->filename = filename;
-	myparams->key_data = key_data;
-	myparams->t_data = t_data;
-	myparams->tag_data = tag_data;
-
-	printf("Challenging file %s...\n", myparams->filename);
-	printf("\tCreating challenge for %s...", myparams->filename);
-	challenge = cpor_challenge_file(myparams);
+	printf("Challenging file %s...\n", filename);
+	printf("\tCreating challenge for %s...", filename);
+	challenge = cpor_challenge(params, key_data, t_data);
 	if(!challenge) {
 		printf("No challenge\n");
 		return -1;
 	}
 	else printf("Done.\n");
 
+	printf("\tGetting tags...");
+	CPOR_tag **tags = cpor_get_tags(challenge, tag_data);
+	if(!tags) {
+		printf("Get tags error\n");
+		return -1;
+	}
+
 	printf("\tComputing proof...");
-	proof = cpor_prove_file(myparams, challenge);
+	proof = cpor_prove_file(params, filename, challenge, tags);
 	if(!proof) {
 		printf("No proof\n");
 		return -1;
@@ -275,13 +301,19 @@ int cpor_verify(char *filename, char *key_data, char *t_data, char *tag_data)
 	else printf("Done.\n");
 
     printf("\tVerifying proof...");
-	ret = cpor_verify_file(myparams, challenge, proof);
+	ret = cpor_verify_file(params, filename, key_data, t_data, challenge, proof);
     printf("Done.\n");
 
     if(challenge) destroy_cpor_challenge(challenge);
-	if(proof) destroy_cpor_proof(myparams, proof);
+	if(tags) {
+		for(int i = 0; i < challenge->l; i++) {
+			destroy_cpor_tag(tags[i]);
+		}
+		free(tags); tags = NULL;
+	}
+	if(proof) destroy_cpor_proof(params, proof);
 
-	free(myparams); myparams = NULL;
+	free(params); params = NULL;
 
 	return ret;
 }
@@ -295,7 +327,7 @@ int cpor_verify(char *filename, char *key_data, char *t_data, char *tag_data)
 // curl_easy_setopt( curl, CURLOPT_WRITEDATA, (void *)&wr_error ); 
 // curl_easy_setopt( curl, CURLOPT_WRITEFUNCTION, write_data );
 
-void send_data(char *data, size_t len, char *url)
+static void send_data(char *data, size_t len, char *url, size_t (*callback)(void *ptr, size_t size, size_t nmemb, void *data))
 {
 	CURL *curl;
     CURLcode res;
@@ -304,7 +336,7 @@ void send_data(char *data, size_t len, char *url)
     curl = curl_easy_init();
     if(curl) {
         /* we want to use our own read function */
-        curl_easy_setopt(curl, CURLOPT_READFUNCTION, read_params_callback);
+        curl_easy_setopt(curl, CURLOPT_READFUNCTION, callback);
 
         /* enable uploading */
         curl_easy_setopt(curl, CURLOPT_UPLOAD, 1L);
@@ -318,7 +350,7 @@ void send_data(char *data, size_t len, char *url)
         curl_easy_setopt(curl, CURLOPT_READDATA, data);
 
 		 /* and give the size of the upload (optional) */
-        curl_easy_setopt(curl, CURLOPT_INFILESIZE_LARGE, len);
+        curl_easy_setopt(curl, CURLOPT_INFILESIZE_LARGE, (curl_off_t)len);
 
         /* Now run off and do what you've been told! */
         res = curl_easy_perform(curl);
@@ -332,7 +364,7 @@ void send_data(char *data, size_t len, char *url)
     }
 }
 
-void send_file(char *filename, char *url)
+static void send_file(char *filename, char *url)
 {
 	CURL *curl;
     CURLcode res;
@@ -381,17 +413,21 @@ void send_file(char *filename, char *url)
     fclose(file); /* close the local file */
 }
 
-void cpor_send(CPOR_params *params, char *key_filename, char *t_filename, char *tag_filename)
+static void cpor_send(CPOR_params *params, char *filename, char *key_filename, char *t_filename, char *tag_filename)
 {
 	// char *http_server = "http://192.168.50.206:9999";
 	char *http_server = "http://localhost:9999";
 	char *params_path = str_concat_many(2, http_server, "/audit/cpor_params");
+	char *filename_path = str_concat_many(2, http_server, "/audit/cpor_filename");
 	char *key_path = str_concat_many(2, http_server, "/audit/cpor_key");
 	char *t_path = str_concat_many(2, http_server, "/audit/cpor_t");
 	char *tag_path = str_concat_many(2, http_server, "/audit/cpor_tag");
 	
 	params_remaining_size = sizeof(CPOR_params);
-	send_data(params, params_remaining_size, params_path);
+	send_data((char *)params, params_remaining_size, params_path, read_params_callback);
+
+	filename_remaining_size = strlen(filename);
+	send_data((char *)filename, filename_remaining_size, filename_path, read_filename_callback);
 
 	send_file(key_filename, key_path);
 	send_file(t_filename, t_path);
@@ -415,7 +451,7 @@ void tag_test()
 	cpor_tag(filename, key_filename, t_filename, tag_filename);
 
 	CPOR_params *params = cpor_new_params();
-	cpor_send(params, key_filename, t_filename, tag_filename);
+	cpor_send(params, filename, key_filename, t_filename, tag_filename);
 }
 
 void verify_test()
@@ -471,7 +507,7 @@ void verify_test()
 	free(tag_data);
 }
 
-void main()
+int main()
 {
     curl_global_init(CURL_GLOBAL_ALL);
 
@@ -479,4 +515,6 @@ void main()
 	verify_test();
 
     curl_global_cleanup();
+
+	return 0;
 }
